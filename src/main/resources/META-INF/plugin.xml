@@ -1,0 +1,52 @@
+<!-- Plugin Configuration File. Read more: https://plugins.jetbrains.com/docs/intellij/plugin-configuration-file.html -->
+<idea-plugin>
+    <!-- Unique identifier of the plugin. It should be FQN. It cannot be changed between the plugin versions. -->
+    <id>com.liyun.Mybatis_G_216</id>
+
+    <!-- Public plugin name should be written in Title Case.
+         Guidelines: https://plugins.jetbrains.com/docs/marketplace/plugin-overview-page.html#plugin-name -->
+    <name>Mybatis_G_216</name>
+
+    <!-- A displayed Vendor name or Organization ID displayed on the Plugins Page. -->
+    <vendor email="support@liyun.com" url="https://www.yourcompany.com">aaaaaaaaaaaa</vendor>
+
+    <!-- Description of the plugin displayed on the Plugin Page and IDE Plugin Manager.
+         Simple HTML elements (text formatting, paragraphs, and lists) can be added inside of <![CDATA[ ]]> tag.
+         Guidelines: https://plugins.jetbrains.com/docs/marketplace/plugin-overview-page.html#plugin-description -->
+    <description><![CDATA[
+    mybatis代码生成好药多好阿戈河和国防建设是咖啡教室的公司的qqqqqqqqqqqqqqqqqqq.<br>
+    <em>代码生成</em>
+  ]]></description>
+
+    <!-- Product and plugin compatibility requirements.
+         Read more: https://plugins.jetbrains.com/docs/intellij/plugin-compatibility.html -->
+    <!-- 插件依赖 -->
+    <depends>com.intellij.database</depends>
+    <!-- Extension points defined by the plugin.
+         Read more: https://plugins.jetbrains.com/docs/intellij/plugin-extension-points.html -->
+    <extensions defaultExtensionNs="com.intellij">
+        <!--        &lt;!&ndash; 注册工具窗口 &ndash;&gt;
+                <toolWindow id="JoinQueryToolWindow"
+                            anchor="bottom"
+                            factoryClass="com.example.mybatisjoingenerator.ui.ToolWindow.JoinQueryToolWindowFactory"
+                            secondary="true"
+                            canCloseContents="true">
+                </toolWindow>-->
+    </extensions>
+
+    <!-- 将所有动作定义放在 <actions> 元素内 -->
+    <actions>
+        <action id="GenerateJavaEntityAction"
+                class="com.example.mybatisjoingenerator.actions.GenerateJoinCodeAction"
+                text="联合查询"
+                description="根据表结构生成Java实体类">
+            <!-- 将动作添加到正确的动作组 -->
+            <add-to-group group-id="DatabaseViewPopupMenu" anchor="first"/>
+        </action>
+
+        <!-- 添加到数据库右键菜单 -->
+        <!--        <action id="GenerateJoinedEntityAction" class="com.liyun.mybatis_g_216.GenerateJoinedEntityAction" text="生成联合实体类">
+                    <add-to-group group-id="DatabaseView.PopupGroup" anchor="last" />
+                </action>-->
+    </actions>
+</idea-plugin>
