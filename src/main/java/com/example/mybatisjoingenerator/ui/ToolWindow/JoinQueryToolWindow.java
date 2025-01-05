@@ -26,7 +26,7 @@ public class JoinQueryToolWindow {
         return joinQueryPanel;
     }
 
-    public JPanel getMainPanel() {
+    public JScrollPane getMainPanel() {
         return joinQueryPanel.getMainPanel();
     }
 }

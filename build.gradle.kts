@@ -17,7 +17,7 @@ intellij {
   type.set("IU") // 'IC' 表示 Community Edition，'IU' 表示 Ultimate Edition
 
   // 添加插件依赖，这里添加官方数据库插件
-  plugins.set(listOf("com.intellij.database"))
+  plugins.set(listOf("com.intellij.database", "java"))
 }
 
 dependencies {
@@ -36,10 +36,7 @@ tasks {
   patchPluginXml {
     sinceBuild.set("222") // 对应 IntelliJ IDEA 2022.2
     untilBuild.set("232.*") // 直到 IntelliJ IDEA 2023.2.x
-    // 可选：添加变更日志
-    // changeNotes.set("""
-    //     初始版本发布。
-    // """.trimIndent())
+
   }
 
   // 配置插件签名任务

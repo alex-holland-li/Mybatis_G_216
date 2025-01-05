@@ -3,8 +3,9 @@ package com.example.mybatisjoingenerator.models;
 import java.util.List;
 
 public class UserSelection {
-    private String database;
-    private String schema;
+    private String selectedDatabase;
+    private String selectedSchema;
+    private String rootObjectName;
     private String mainTable;
     private String mainTableAlias;
     private String joinTable;
@@ -13,22 +14,23 @@ public class UserSelection {
     private List<TableField> selectedMainFields;
     private List<TableField> selectedJoinFields;
     private String relationType;
-
-    // 新增的字段
-    private String rootObjectName;   // 根对象名
-    private String joinObjectName;   // 副表对象名
-    private String filePath;         // 文件保存路径
-    private boolean saveJavaToFile;  // 是否保存Java对象文件
-
-
+    private String joinObjectName;
+    private String filePath;
+    private boolean saveJavaToFile;
+    private GenerationType generationType;
+    // 新增字段
+    private boolean createSwagger;
+    private boolean createValidator;
+    private boolean createLombok;
     // 构造函数
-    public UserSelection(String database, String schema, String mainTable, String mainTableAlias,
+    public UserSelection(String selectedDatabase, String selectedSchema, String mainTable, String mainTableAlias,
                          String joinTable, String joinTableAlias, String joinCondition,
                          List<TableField> selectedMainFields, List<TableField> selectedJoinFields,
                          String relationType, String rootObjectName, String joinObjectName,
-                         String filePath, boolean saveJavaToFile) {
-        this.database = database;
-        this.schema = schema;
+                         String filePath, boolean saveJavaToFile, GenerationType generationType,
+                         boolean createSwagger, boolean createValidator, boolean createLombok) {
+        this.selectedDatabase = selectedDatabase;
+        this.selectedSchema = selectedSchema;
         this.mainTable = mainTable;
         this.mainTableAlias = mainTableAlias;
         this.joinTable = joinTable;
@@ -41,23 +43,31 @@ public class UserSelection {
         this.joinObjectName = joinObjectName;
         this.filePath = filePath;
         this.saveJavaToFile = saveJavaToFile;
+        this.generationType = generationType;
+        this.createSwagger = createSwagger;
+        this.createValidator = createValidator;
+        this.createLombok = createLombok;
     }
 
-    // Getters and Setters for all fields
-    public String getDatabase() {
-        return database;
+    // Getter 和 Setter 方法
+    public String getSelectedDatabase() {
+        return selectedDatabase;
     }
 
-    public void setDatabase(String database) {
-        this.database = database;
+    public void setSelectedDatabase(String selectedDatabase) {
+        this.selectedDatabase = selectedDatabase;
     }
 
-    public String getSchema() {
-        return schema;
+    public String getSelectedSchema() {
+        return selectedSchema;
     }
 
-    public void setSchema(String schema) {
-        this.schema = schema;
+    public void setSelectedSchema(String selectedSchema) {
+        this.selectedSchema = selectedSchema;
+    }
+
+    public void setSaveJavaToFile(boolean saveJavaToFile) {
+        this.saveJavaToFile = saveJavaToFile;
     }
 
     public String getMainTable() {
@@ -152,7 +162,42 @@ public class UserSelection {
         return saveJavaToFile;
     }
 
-    public void setSaveJavaToFile(boolean saveJavaToFile) {
-        this.saveJavaToFile = saveJavaToFile;
+    public GenerationType getGenerationType() {
+        return generationType;
+    }
+
+    public void setGenerationType(GenerationType generationType) {
+        this.generationType = generationType;
+    }
+
+    // 新增 Getter 和 Setter 方法
+    public boolean isCreateSwagger() {
+        return createSwagger;
+    }
+
+    public void setCreateSwagger(boolean createSwagger) {
+        this.createSwagger = createSwagger;
+    }
+
+    public boolean isCreateValidator() {
+        return createValidator;
+    }
+
+    public void setCreateValidator(boolean createValidator) {
+        this.createValidator = createValidator;
+    }
+
+    public boolean isCreateLombok() {
+        return createLombok;
+    }
+
+    public void setCreateLombok(boolean createLombok) {
+        this.createLombok = createLombok;
+    }
+
+    public enum GenerationType {
+        GENERATE_NEW_CLASS,
+        SELECT_EXISTING,
+        GENERATE_MAIN_SELECT_JOIN
     }
 }

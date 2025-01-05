@@ -11,13 +11,9 @@ import org.apache.commons.lang3.StringUtils;
 import javax.swing.*;
 import javax.swing.table.AbstractTableModel;
 import java.awt.*;
-import java.awt.event.ItemEvent;
-import java.io.BufferedWriter;
-import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 
 public class JoinQueryPanel {
@@ -25,46 +21,33 @@ public class JoinQueryPanel {
     public JComboBox<String> databaseComboBox;  // 数据库选择下拉框
     public JComboBox<String> schemaComboBox;    // 模式选择下拉框
     public JComboBox<String> mainTableComboBox; // 主表选择下拉框
-    public JComboBox<String> joinTableComboBox; // 副表选择下拉框
-    public JComboBox<String> relationTypeComboBox; // 关联关系选择下拉框
+    public JComboBox<String> joinTableComboBox; // 链接表选择下拉框
     public JComboBox<String> mainJoinFieldComboBox;  // 主表关联字段选择下拉框
-    public JComboBox<String> joinJoinFieldComboBox;  // 副表关联字段选择下拉框
+    public JComboBox<String> joinJoinFieldComboBox;  // 链接表关联字段选择下拉框
     // 主面板
     JPanel mainPanel;
+    JScrollPane scrollPane;
     JButton generateButton;  // 生成代码按钮
     private Project project;
     private JTextField mainTableAliasField;  // 主表别名输入框
-    private JTextField joinTableAliasField;  // 副表别名输入框
+    private JTextField joinTableAliasField;  // 链接表别名输入框
 
     private JComboBox<String> mainFieldSelectionComboBox;  // 主表字段选择下拉框
     private JButton addMainFieldButton;  // 添加主表字段按钮
     private JTable selectedMainFieldsTable;  // 已选择主表字段表格
     private SelectedFieldsTableModel selectedMainFieldsTableModel;  // 主表已选字段表格模型
 
-    private JComboBox<String> joinFieldSelectionComboBox;  // 副表字段选择下拉框
-    private JButton addJoinFieldButton;  // 添加副表字段按钮
-    private JTable selectedJoinFieldsTable;  // 已选择副表字段表格
-    private SelectedFieldsTableModel selectedJoinFieldsTableModel;  // 副表已选字段表格模型
+    private JComboBox<String> joinFieldSelectionComboBox;  // 链接表字段选择下拉框
+    private JButton addJoinFieldButton;  // 添加链接表字段按钮
+    private JTable selectedJoinFieldsTable;  // 已选择链接表字段表格
+    private SelectedFieldsTableModel selectedJoinFieldsTableModel;  // 链接表已选字段表格模型
 
-    private JTextField packagePathTextField;  // 包路径输入框
-    private JFileChooser packagePathChooser;  // 包路径输入框
-
-    private JCheckBox autoGenerateJavaFileCheckBox;  // 是否自动生成Java文件的勾选框
-
-    private JCheckBox createNewJavaObject;  // 是否自动生成Java文件的勾选框
-
-    private JTextField fileNameTextField;  // 文件名输入框
-    private JTextField joinObjectNameTextField;  // 副表对象命名输入框
-    private JLabel joinObjectJLabel;
-
-    private JPanel packagePathPanel;
-
+    private JavaSelectOrCreatePanel javaSelectOrCreatePanel;
 
     private String previousDatabaseSelection = null;
     private String previousSchemaSelection = null;
     private String previousMainTableSelection = null;
     private String previousJoinTableSelection = null;
-
 
     public JoinQueryPanel(Project project) {
         this.project = project;
@@ -80,18 +63,15 @@ public class JoinQueryPanel {
         databaseComboBox = new SearchableComboBox();
         databaseComboBox.setModel(new DefaultComboBoxModel<>(getDatabaseNames()));
 
-        //模式选择
+        // 模式选择
         schemaComboBox = new SearchableComboBox();
-        //主表选择
+        // 主表选择
         mainTableComboBox = new SearchableComboBox();
-        //副表选择
+        // 链接表选择
         joinTableComboBox = new SearchableComboBox();
-        //关联关系
-        relationTypeComboBox = new SearchableComboBox();
-        relationTypeComboBox.setModel(new DefaultComboBoxModel<>(new String[]{"普通", "一对一", "一对多"}));
-        //主表关联字段选择
+        // 主表关联字段选择
         mainJoinFieldComboBox = new SearchableComboBox();
-        //副表关联字段选择
+        // 链接表关联字段选择
         joinJoinFieldComboBox = new SearchableComboBox();
 
         // 初始化按钮
@@ -99,7 +79,7 @@ public class JoinQueryPanel {
 
         // 初始化文本框
         mainTableAliasField = new JTextField(10);  // 主表别名输入框
-        joinTableAliasField = new JTextField(10);  // 副表别名输入框
+        joinTableAliasField = new JTextField(10);  // 链接表别名输入框
 
         // 初始化字段选择下拉框
         mainFieldSelectionComboBox = new SearchableComboBox();
@@ -107,7 +87,7 @@ public class JoinQueryPanel {
 
         // 初始化添加字段按钮
         addMainFieldButton = new JButton("添加主表字段");
-        addJoinFieldButton = new JButton("添加副表字段");
+        addJoinFieldButton = new JButton("添加链接表字段");
 
         // 初始化已选字段表格
         selectedMainFieldsTableModel = new SelectedFieldsTableModel();
@@ -116,45 +96,33 @@ public class JoinQueryPanel {
         selectedJoinFieldsTableModel = new SelectedFieldsTableModel();
         selectedJoinFieldsTable = new JTable(selectedJoinFieldsTableModel);
 
-        // 初始化文件路径选择器
-        packagePathChooser = new JFileChooser();
-        packagePathChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);  // 只选择文件夹
-        packagePathChooser.setCurrentDirectory(new java.io.File(project.getBasePath() + "/src/main/java"));
-
-        createNewJavaObject = new JCheckBox("生成新Java对象", false);
-
-
-        // 初始化勾选框
-        autoGenerateJavaFileCheckBox = new JCheckBox("自动保存Java对象源码文件", true); // 默认勾选
-
-        // 文件名输入框
-        fileNameTextField = new JTextField(20);
-        fileNameTextField.setText("User");  // 默认文件名为 "User"
-
-        // 副表对象命名文本框，默认隐藏
-        joinObjectNameTextField = new JTextField(20);
-        joinObjectNameTextField.setText("UserCouponRecords");  // 默认副表对象名
-        joinObjectNameTextField.setVisible(false);  // 默认不显示
-
-        joinObjectJLabel = new JLabel("副表对象命名:");
-        joinObjectJLabel.setVisible(false);
-
+        javaSelectOrCreatePanel = new JavaSelectOrCreatePanel(project, "生成选项");
     }
 
-    // 构建UI界面
+    // 构建 UI 界面
     private void buildUI() {
         mainPanel = new JPanel();
         mainPanel.setLayout(new BoxLayout(mainPanel, BoxLayout.Y_AXIS)); // 设置主面板的布局为垂直方向
+        // 创建 JScrollPane，将主面板作为其视口视图
+        scrollPane = new JScrollPane(mainPanel);
+        scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+        scrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+
+        // 设置垂直滚动条的单位增量和块增量
+        scrollPane.getVerticalScrollBar().setUnitIncrement(30); // 每次滚动30像素
+
+        // 设置水平滚动条的单位增量和块增量（如果需要）
+        scrollPane.getHorizontalScrollBar().setUnitIncrement(30);
 
         // 数据库选择面板
         JPanel databasePanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        databasePanel.add(new JLabel("数据库:"));
+        databasePanel.add(new JLabel("数据链接实例:"));
         databasePanel.add(databaseComboBox);
         mainPanel.add(databasePanel);
 
         // 模式选择面板
         JPanel schemaPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        schemaPanel.add(new JLabel("模式:"));
+        schemaPanel.add(new JLabel("命名空间:"));
         schemaPanel.add(schemaComboBox);
         mainPanel.add(schemaPanel);
 
@@ -167,28 +135,21 @@ public class JoinQueryPanel {
         mainTablePanel.add(mainTableAliasField);
         mainPanel.add(mainTablePanel);
 
-        // 副表选择和别名面板
+        // 链接表选择和别名面板
         JPanel joinTablePanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        joinTablePanel.setBorder(BorderFactory.createTitledBorder("副表选择"));
-        joinTablePanel.add(new JLabel("副表:"));
+        joinTablePanel.setBorder(BorderFactory.createTitledBorder("链接表选择"));
+        joinTablePanel.add(new JLabel("链接表:"));
         joinTablePanel.add(joinTableComboBox);
-        joinTablePanel.add(new JLabel("副表别名:"));
+        joinTablePanel.add(new JLabel("链接表别名:"));
         joinTablePanel.add(joinTableAliasField);
         mainPanel.add(joinTablePanel);
-
-        // 关联关系选择面板
-        JPanel relationPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        relationPanel.setBorder(BorderFactory.createTitledBorder("关联关系"));
-        relationPanel.add(new JLabel("关联关系:"));
-        relationPanel.add(relationTypeComboBox);
-        mainPanel.add(relationPanel);
 
         // 关联条件选择面板
         JPanel joinConditionPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
         joinConditionPanel.setBorder(BorderFactory.createTitledBorder("关联条件"));
         joinConditionPanel.add(new JLabel("主表字段:"));
         joinConditionPanel.add(mainJoinFieldComboBox);
-        joinConditionPanel.add(new JLabel("副表字段:"));
+        joinConditionPanel.add(new JLabel("链接表字段:"));
         joinConditionPanel.add(joinJoinFieldComboBox);
         mainPanel.add(joinConditionPanel);
 
@@ -208,62 +169,24 @@ public class JoinQueryPanel {
         selectedMainFieldsPanel.add(mainFieldsScrollPane, BorderLayout.CENTER);
         mainPanel.add(selectedMainFieldsPanel);
 
-        // 副表字段选择面板
+        // 链接表字段选择面板
         JPanel joinFieldsSelectionPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        joinFieldsSelectionPanel.setBorder(BorderFactory.createTitledBorder("副表字段选择"));
-        joinFieldsSelectionPanel.add(new JLabel("选择副表字段:"));
+        joinFieldsSelectionPanel.setBorder(BorderFactory.createTitledBorder("链接表字段选择"));
+        joinFieldsSelectionPanel.add(new JLabel("选择链接表字段:"));
         joinFieldsSelectionPanel.add(joinFieldSelectionComboBox);
         joinFieldsSelectionPanel.add(addJoinFieldButton);
         mainPanel.add(joinFieldsSelectionPanel);
 
-        // 已选副表字段表格面板
+        // 已选链接表字段表格面板
         JPanel selectedJoinFieldsPanel = new JPanel(new BorderLayout());
-        selectedJoinFieldsPanel.setBorder(BorderFactory.createTitledBorder("已选副表字段"));
+        selectedJoinFieldsPanel.setBorder(BorderFactory.createTitledBorder("已选链接表字段"));
         JScrollPane joinFieldsScrollPane = new JScrollPane(selectedJoinFieldsTable);
         joinFieldsScrollPane.setPreferredSize(new Dimension(800, 100));
         selectedJoinFieldsPanel.add(joinFieldsScrollPane, BorderLayout.CENTER);
         mainPanel.add(selectedJoinFieldsPanel);
 
-        // 添加是否自动生成文件的勾选框
-        JPanel autoGeneratePanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        autoGeneratePanel.add(autoGenerateJavaFileCheckBox);
-        mainPanel.add(autoGeneratePanel);
-
-        // 添加包路径选择按钮
-        packagePathPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        packagePathPanel.add(new JLabel("选择包路径:"));
-        JButton choosePathButton = new JButton("选择路径");
-
-        choosePathButton.addActionListener(e -> {
-            int returnValue = packagePathChooser.showOpenDialog(null);  // 弹出文件夹选择对话框
-            if (returnValue == JFileChooser.APPROVE_OPTION) {
-                // 获取选择的路径
-                java.io.File selectedFolder = packagePathChooser.getSelectedFile();
-                // 更新路径文本框
-                packagePathTextField.setText(selectedFolder.getAbsolutePath());
-            }
-        });
-
-        packagePathTextField = new JTextField(20);
-        packagePathTextField.setText(packagePathChooser.getCurrentDirectory().getAbsolutePath());  // 默认显示当前路径
-
-        packagePathPanel.add(packagePathTextField);
-        packagePathPanel.add(choosePathButton);
-        mainPanel.add(packagePathPanel);
-
-        // 添加文件名输入框
-        JPanel fileNamePanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        fileNamePanel.add(new JLabel("根对象名:"));
-        fileNameTextField = new JTextField(20);
-        fileNameTextField.setText("");  // 默认文件名
-        fileNamePanel.add(fileNameTextField);
-        mainPanel.add(fileNamePanel);
-
-        // 添加副表对象命名文本框，仅在选择一对一或一对多时显示
-        JPanel joinObjectNamePanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        joinObjectNamePanel.add(joinObjectJLabel);
-        joinObjectNamePanel.add(joinObjectNameTextField);  // 添加副表对象命名框
-        mainPanel.add(joinObjectNamePanel);
+        // 添加生成选项面板
+        mainPanel.add(javaSelectOrCreatePanel);
 
         // 生成按钮面板
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
@@ -282,7 +205,7 @@ public class JoinQueryPanel {
         databaseComboBox.addActionListener(event -> {
             String selectedDatabase = (String) databaseComboBox.getSelectedItem();
             if (!StringUtils.isEmpty(selectedDatabase) && !selectedDatabase.equals(previousDatabaseSelection)) {
-                //修改数据库连接
+                // 修改数据库连接
                 resetOnDatabaseChange(selectedDatabase);
             }
         });
@@ -291,7 +214,7 @@ public class JoinQueryPanel {
         schemaComboBox.addActionListener(event -> {
             String selectedSchema = (String) schemaComboBox.getSelectedItem();
             if (!StringUtils.isEmpty(selectedSchema) && !selectedSchema.equals(previousSchemaSelection)) {
-                //修改schema
+                // 修改 schema
                 resetOnSchemaChange(selectedSchema);
             }
         });
@@ -300,23 +223,23 @@ public class JoinQueryPanel {
         mainTableComboBox.addActionListener(event -> {
             String selectedMainTable = (String) mainTableComboBox.getSelectedItem();
             if (!StringUtils.isEmpty(selectedMainTable) && !selectedMainTable.equals(previousMainTableSelection)) {
-                //修改主表选择
+                // 修改主表选择
                 resetOnMainTableChange(selectedMainTable);
             }
         });
 
-        // 监听副表选择，判断副表是否发生变化，若有变化则重置相关字段
+        // 监听链接表选择，判断链接表是否发生变化，若有变化则重置相关字段
         joinTableComboBox.addActionListener(event -> {
             String selectedJoinTable = (String) joinTableComboBox.getSelectedItem();
             if (!StringUtils.isEmpty(selectedJoinTable) && !selectedJoinTable.equals(previousJoinTableSelection)) {
-                //修改副表选择
+                // 修改链接表选择
                 resetOnJoinTableChange(selectedJoinTable);
             }
         });
         // 监听添加主表字段按钮点击事件
         addMainFieldButton.addActionListener(event -> addSelectedMainField());
 
-        // 监听添加副表字段按钮点击事件
+        // 监听添加链接表字段按钮点击事件
         addJoinFieldButton.addActionListener(event -> addSelectedJoinField());
         // 为已选字段表格添加右键菜单
         addTableDeleteFunctionality(selectedMainFieldsTable, selectedMainFieldsTableModel);
@@ -332,83 +255,21 @@ public class JoinQueryPanel {
                 return;
             }
 
-            // 生成代码
+            // 生成 Java 类
             CodeGenerator generator = new CodeGenerator();
-            String sqlCode = generator.generateSelectQuery(selection);
-            String resultMapCode = generator.generateResultMap(selection);
-            String mapperCode = generator.generateMapperInterface(selection);
-            String javaClassesCode = generator.generateJavaClasses(selection);
+            String generate = generator.generate(selection);
 
-            // 获取包路径和文件名（如果勾选了自动生成）
-            String packagePath = packagePathTextField.getText();
-            String fileName = fileNameTextField.getText() + ".java";  // 默认添加 .java 后缀
-            boolean autoGenerate = autoGenerateJavaFileCheckBox.isSelected();
+            // 生成 Select Query 和 ResultMap
+            String selectQuery = generator.generateSelectQuery(selection);
+            String resultMap = generator.generateResultMap(selection);
+            String mapperMethods = generator.generateMapperInterface(selection);
 
-
-            // 如果勾选了自动生成，保存文件到指定路径
-            if (autoGenerate) {
-                generator.saveJavaClasses(packagePath, fileName, javaClassesCode);
-            }
-
-            // 创建并显示 CodeDisplayFrame
-            CodeDisplayFrame codeDisplayFrame = new CodeDisplayFrame(sqlCode, resultMapCode, mapperCode, javaClassesCode);
+            // 创建并显示 CodeDisplayFrame，供用户复制粘贴
+            CodeDisplayFrame codeDisplayFrame = new CodeDisplayFrame(selectQuery, resultMap, mapperMethods, generate);
             codeDisplayFrame.setVisible(true);
         });
 
-
-        // 监听关联关系选择变化，控制副表对象命名框的显示与隐藏
-        relationTypeComboBox.addActionListener(event -> {
-            String selectedRelationType = (String) relationTypeComboBox.getSelectedItem();
-            if ("一对一".equalsIgnoreCase(selectedRelationType) || "一对多".equalsIgnoreCase(selectedRelationType)) {
-                joinObjectNameTextField.setVisible(true);  // 显示副表对象命名框
-                joinObjectJLabel.setVisible(true);
-            } else {
-                joinObjectJLabel.setVisible(false);
-                joinObjectNameTextField.setVisible(false);  // 隐藏副表对象命名框
-            }
-        });
-
-        // 监听勾选框的选中状态
-        autoGenerateJavaFileCheckBox.addItemListener(e -> {
-            boolean isSelected = e.getStateChange() == ItemEvent.SELECTED;  // 判断勾选框是否被选中
-            if (isSelected) {
-                // 用户选择生成 Java 文件，显示文件路径选择器
-                packagePathPanel.setVisible(true);
-            } else {
-                // 用户取消选择，不生成文件，禁用路径选择器
-                packagePathPanel.setVisible(false);
-            }
-        });
     }
-
-    private void saveJavaClassesToFile(String javaClassesCode, String packageName) {
-        if (StringUtils.isEmpty(packageName)) {
-            Messages.showErrorDialog("请指定包路径！", "错误");
-            return;
-        }
-
-        try {
-            String filePath = packageName.replace(".", "/") + "/GeneratedJavaClass.java";
-            File file = new File(filePath);
-            if (!file.getParentFile().exists()) {
-                file.getParentFile().mkdirs();
-            }
-
-            try (BufferedWriter writer = new BufferedWriter(new FileWriter(file))) {
-                writer.write(javaClassesCode);
-            }
-
-            Messages.showInfoMessage("Java类文件已保存至：" + file.getAbsolutePath(), "保存成功");
-
-        } catch (IOException ex) {
-            Messages.showErrorDialog("保存文件时出错：" + ex.getMessage(), "错误");
-        }
-    }
-
-    private String getPackageNameFromUser() {
-        return packagePathTextField.getText().trim();  // 获取用户输入的包路径
-    }
-
 
     // 为表格添加右键菜单功能
     private void addTableDeleteFunctionality(JTable table, SelectedFieldsTableModel model) {
@@ -450,7 +311,7 @@ public class JoinQueryPanel {
         }
     }
 
-    // 副表选择字段
+    // 链接表选择字段
     private void addSelectedJoinField() {
         String selectedField = (String) joinFieldSelectionComboBox.getSelectedItem();
         if (!StringUtils.isEmpty(selectedField)) {
@@ -469,31 +330,31 @@ public class JoinQueryPanel {
     // 修改选择数据库
     private void resetOnDatabaseChange(String selectedDatabase) {
         // 重置所有与数据库相关的字段
-        //模式列表
+        // 模式列表
         Set<String> schemaNames = DataBaseContext.getAllSchemaNames(selectedDatabase);
         schemaComboBox.setModel(new DefaultComboBoxModel<>(schemaNames.toArray(new String[0])));
 
-        //主表列表
+        // 主表列表
         mainTableComboBox.setModel(new DefaultComboBoxModel<>(new String[]{}));
 
-        //副表列表
+        // 链接表列表
         joinTableComboBox.setModel(new DefaultComboBoxModel<>(new String[]{}));
 
-        //主表关联字段列表
+        // 主表关联字段列表
         mainJoinFieldComboBox.setModel(new DefaultComboBoxModel<>(new String[]{}));
 
-        //副表关联字段列表
+        // 链接表关联字段列表
         joinJoinFieldComboBox.setModel(new DefaultComboBoxModel<>(new String[]{}));
 
-        //主表字段选择列表
+        // 主表字段选择列表
         mainFieldSelectionComboBox.setModel(new DefaultComboBoxModel<>(new String[]{}));
 
-        //副表字段选择列表
+        // 链接表字段选择列表
         joinFieldSelectionComboBox.setModel(new DefaultComboBoxModel<>(new String[]{}));
 
-        //已选择主表字段
+        // 已选择主表字段
         selectedMainFieldsTableModel.clear();
-        //已选择副表字段
+        // 已选择链接表字段
         selectedJoinFieldsTableModel.clear();
 
         // 清空别名输入框
@@ -508,28 +369,28 @@ public class JoinQueryPanel {
 
     // 修改Schema
     private void resetOnSchemaChange(String selectedSchema) {
-        //主表列表
-        Set<String> schemaNames = DataBaseContext.getAllTableNames(previousDatabaseSelection, selectedSchema);
-        mainTableComboBox.setModel(new DefaultComboBoxModel<>(schemaNames.toArray(new String[0])));
+        // 主表列表
+        Set<String> tableNames = DataBaseContext.getAllTableNames(previousDatabaseSelection, selectedSchema);
+        mainTableComboBox.setModel(new DefaultComboBoxModel<>(tableNames.toArray(new String[0])));
 
-        //副表列表
-        joinTableComboBox.setModel(new DefaultComboBoxModel<>(schemaNames.toArray(new String[0])));
+        // 链接表列表
+        joinTableComboBox.setModel(new DefaultComboBoxModel<>(tableNames.toArray(new String[0])));
 
-        //主表关联字段列表
+        // 主表关联字段列表
         mainJoinFieldComboBox.setModel(new DefaultComboBoxModel<>(new String[]{}));
 
-        //副表关联字段列表
+        // 链接表关联字段列表
         joinJoinFieldComboBox.setModel(new DefaultComboBoxModel<>(new String[]{}));
 
-        //主表字段选择列表
+        // 主表字段选择列表
         mainFieldSelectionComboBox.setModel(new DefaultComboBoxModel<>(new String[]{}));
 
-        //副表字段选择列表
+        // 链接表字段选择列表
         joinFieldSelectionComboBox.setModel(new DefaultComboBoxModel<>(new String[]{}));
 
-        //已选择主表字段
+        // 已选择主表字段
         selectedMainFieldsTableModel.clear();
-        //已选择副表字段
+        // 已选择链接表字段
         selectedJoinFieldsTableModel.clear();
 
         // 清空别名输入框
@@ -543,15 +404,11 @@ public class JoinQueryPanel {
 
     // 修改主表发生变化时，重置所有相关字段
     private void resetOnMainTableChange(String selectedMainTable) {
-        Set<String> schemaNames = DataBaseContext.getTableColumns(previousDatabaseSelection, previousSchemaSelection, selectedMainTable).keySet();
+        Set<String> mainTableColumns = Objects.requireNonNull(DataBaseContext.getTableColumns(previousDatabaseSelection, previousSchemaSelection, selectedMainTable)).keySet();
+        mainJoinFieldComboBox.setModel(new DefaultComboBoxModel<>(mainTableColumns.toArray(new String[0])));
+        mainFieldSelectionComboBox.setModel(new DefaultComboBoxModel<>(mainTableColumns.toArray(new String[0])));
 
-        //主表关联字段列表
-        mainJoinFieldComboBox.setModel(new DefaultComboBoxModel<>(schemaNames.toArray(new String[0])));
-
-        //主表字段选择列表
-        mainFieldSelectionComboBox.setModel(new DefaultComboBoxModel<>(schemaNames.toArray(new String[0])));
-
-        //已选择主表字段
+        // 已选择主表字段
         selectedMainFieldsTableModel.clear();
 
         // 清空主表别名输入框
@@ -560,13 +417,18 @@ public class JoinQueryPanel {
         previousMainTableSelection = selectedMainTable;
     }
 
-    // 当选择的副表发生变化时，重置所有相关字段
+    // 当选择的链接表发生变化时，重置所有相关字段
     private void resetOnJoinTableChange(String selectedJoinTable) {
-        Set<String> schemaNames = DataBaseContext.getTableColumns(previousDatabaseSelection, previousSchemaSelection, selectedJoinTable).keySet();
-        joinJoinFieldComboBox.setModel(new DefaultComboBoxModel<>(schemaNames.toArray(new String[0])));
-        joinFieldSelectionComboBox.setModel(new DefaultComboBoxModel<>(schemaNames.toArray(new String[0])));
+        Set<String> joinTableColumns = Objects.requireNonNull(DataBaseContext.getTableColumns(previousDatabaseSelection, previousSchemaSelection, selectedJoinTable)).keySet();
+        joinJoinFieldComboBox.setModel(new DefaultComboBoxModel<>(joinTableColumns.toArray(new String[0])));
+        joinFieldSelectionComboBox.setModel(new DefaultComboBoxModel<>(joinTableColumns.toArray(new String[0])));
+
+        // 已选择链接表字段
         selectedJoinFieldsTableModel.clear();
+
+        // 清空链接表别名输入框
         joinTableAliasField.setText(selectedJoinTable);
+
         previousJoinTableSelection = selectedJoinTable;
     }
 
@@ -681,25 +543,25 @@ public class JoinQueryPanel {
     }
 
     // 返回主面板
-    public JPanel getMainPanel() {
-        return mainPanel;
+    public JScrollPane getMainPanel() {
+        return scrollPane;
     }
 
     private UserSelection getUserSelection() {
-        // 获取数据库、模式、主表和副表的选择
+        // 获取数据库、模式、主表和链接表的选择
         String selectedDatabase = (String) databaseComboBox.getSelectedItem();
         String selectedSchema = (String) schemaComboBox.getSelectedItem();
         String mainTable = (String) mainTableComboBox.getSelectedItem();
         String joinTable = (String) joinTableComboBox.getSelectedItem();
-        String relationType = (String) relationTypeComboBox.getSelectedItem();
+        String relationType = javaSelectOrCreatePanel.getRelationType();
 
-        // 获取主表和副表的别名
+        // 获取主表和链接表的别名
         String mainTableAlias = mainTableAliasField.getText().trim();
         String joinTableAlias = joinTableAliasField.getText().trim();
 
-        // 确保主表别名和副表别名不重复
+        // 确保主表别名和链接表别名不重复
         if (!mainTableAlias.isEmpty() && mainTableAlias.equals(joinTableAlias)) {
-            Messages.showErrorDialog("主表别名和副表别名必须唯一。", "错误");
+            Messages.showErrorDialog("主表别名和链接表别名必须唯一。", "错误");
             return null;
         }
 
@@ -713,13 +575,13 @@ public class JoinQueryPanel {
             }
         }
 
-        // 获取已选主表字段和副表字段
+        // 获取已选主表字段和链接表字段
         List<TableField> selectedMainFields = selectedMainFieldsTableModel.getSelectedFields();
         List<TableField> selectedJoinFields = selectedJoinFieldsTableModel.getSelectedFields();
 
         // 检查是否有选中的字段
         if (selectedMainFields.isEmpty() || selectedJoinFields.isEmpty()) {
-            Messages.showErrorDialog("请确保选择了主表和副表的字段。", "错误");
+            Messages.showErrorDialog("请确保选择了主表和链接表的字段。", "错误");
             return null;
         }
 
@@ -729,17 +591,31 @@ public class JoinQueryPanel {
             return null;
         }
 
-        // 检查是否有数据库、模式、主表、副表的选择
+        // 检查是否有数据库、模式、主表、链接表的选择
         if (selectedDatabase == null || selectedSchema == null || mainTable == null || joinTable == null) {
-            Messages.showErrorDialog("请确保选择了数据库、模式、主表和副表。", "错误");
+            Messages.showErrorDialog("请确保选择了数据库、模式、主表和链接表。", "错误");
             return null;
         }
 
-        // 获取根对象名、副表对象名、文件路径和是否自动保存文件
-        String rootObjectName = fileNameTextField.getText().trim();
-        String joinObjectName = joinObjectNameTextField.getText().trim();
-        String filePath = fileNameTextField.getText().trim();
-        boolean saveJavaToFile = autoGenerateJavaFileCheckBox.isSelected();
+        // 获取根对象名、链接表对象名、文件路径和是否自动保存文件
+        String rootObjectName = javaSelectOrCreatePanel.getRootObjectName();
+        String joinObjectName = javaSelectOrCreatePanel.getJoinObjectName();
+        String filePath = javaSelectOrCreatePanel.getFilePath();
+        boolean saveJavaToFile = javaSelectOrCreatePanel.getSaveJavaToFile();
+
+        // 获取新选项
+        boolean createSwagger = javaSelectOrCreatePanel.isCreateSwagger();
+        boolean createValidator = javaSelectOrCreatePanel.isCreateValidator();
+        boolean createLombok = javaSelectOrCreatePanel.isCreateLombok();
+
+        // 获取生成类型
+        UserSelection.GenerationType generationType;
+        try {
+            generationType = javaSelectOrCreatePanel.getGenerationType();
+        } catch (IllegalStateException ex) {
+            Messages.showErrorDialog("请至少选择一个生成类型。", "错误");
+            return null;
+        }
 
         // 返回封装了用户选择的 UserSelection 对象
         return new UserSelection(
@@ -748,15 +624,19 @@ public class JoinQueryPanel {
                 mainTable,
                 mainTableAlias.isEmpty() ? mainTable : mainTableAlias, // 使用别名或主表名
                 joinTable,
-                joinTableAlias.isEmpty() ? joinTable : joinTableAlias, // 使用别名或副表名
+                joinTableAlias.isEmpty() ? joinTable : joinTableAlias, // 使用别名或链接表名
                 joinCondition,
                 selectedMainFields,
                 selectedJoinFields,
                 relationType,
                 rootObjectName,   // 新增根对象名
-                joinObjectName,   // 新增副表对象名
+                joinObjectName,   // 新增链接表对象名
                 filePath,         // 新增文件路径
-                saveJavaToFile    // 是否自动生成 Java 文件
+                saveJavaToFile,   // 是否自动生成 Java 文件
+                generationType,   // 设置生成类型
+                createSwagger,    // 新增
+                createValidator,  // 新增
+                createLombok      // 新增
         );
     }
 
@@ -801,7 +681,7 @@ public class JoinQueryPanel {
 
     // SelectedFieldsTableModel 类：自定义表格模型，用于已选字段表格
     class SelectedFieldsTableModel extends AbstractTableModel {
-        private final String[] columnNames = {"数据库字段名", "Java 字段名"};  // 表格列标题
+        private final String[] columnNames = {"数据库字段名", "Java 字段名", "Java 类型"};  // 表格列标题
         private final List<SelectedField> data = new ArrayList<>();  // 用于存储已选择字段的数据
 
         @Override
@@ -827,6 +707,8 @@ public class JoinQueryPanel {
                     return field.getDatabaseFieldName();
                 case 1:  // Java 字段名列
                     return field.getJavaFieldName();
+                case 2:  // Java 类型列
+                    return field.getJavaType();
                 default:
                     return null;
             }
