@@ -1,35 +1,35 @@
 package com.example.mybatisjoingenerator.generators;
 
+import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 
 /**
- * CodeGeneratorHelper 提供文件保存的辅助方法
+ * 辅助类，用于保存生成的文件
  */
 public class CodeGeneratorHelper {
 
     /**
-     * 保存 Java 文件到指定路径
+     * 保存文件
      *
-     * @param savePath      保存路径（目录）
-     * @param fileName      文件名（含扩展名）
-     * @param javaClassCode Java 类代码内容
+     * @param savePath    保存路径的目录
+     * @param fileName    文件名
+     * @param fileContent 文件内容
      */
-    public void saveJavaFile(String savePath, String fileName, String javaClassCode) {
-        Path filePath = Path.of(savePath, fileName);
+    public void saveFile(String savePath, String fileName, String fileContent) {
         try {
-            // 确保目录存在
-            Files.createDirectories(filePath.getParent());
-
-            // 写入文件
-            try (FileWriter writer = new FileWriter(filePath.toFile())) {
-                writer.write(javaClassCode);
+            File directory = new File(savePath);
+            if (!directory.exists()) {
+                directory.mkdirs();
             }
+            File file = new File(directory, fileName);
+            try (FileWriter writer = new FileWriter(file)) {
+                writer.write(fileContent);
+            }
+            System.out.println("成功保存文件: " + file.getAbsolutePath());
         } catch (IOException e) {
             e.printStackTrace();
-            // 你可以使用日志系统记录错误
+            System.err.println("保存文件时发生错误: " + e.getMessage());
         }
     }
 }

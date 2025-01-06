@@ -8,9 +8,12 @@ import java.awt.event.KeyEvent;
 import java.util.ArrayList;
 import java.util.List;
 
-public class SearchableComboBox extends JComboBox<String> {
+/**
+ * @author 李运
+ */
+public class SearchableComboBox<T> extends JComboBox<T> {
 
-    private List<String> allItems;  // 存储所有项的列表
+    private List<T> allItems;  // 存储所有项的列表
 
     private String currentText = "";
 
@@ -30,7 +33,7 @@ public class SearchableComboBox extends JComboBox<String> {
 
     // 重写 setModel 方法，使得每次设置新模型时支持搜索功能
     @Override
-    public void setModel(ComboBoxModel<String> aModel) {
+    public void setModel(ComboBoxModel<T> aModel) {
         super.setModel(aModel);  // 调用父类的 setModel 方法
         // 获取模型中的所有项，并存储在 allItems 列表中
         allItems = new ArrayList<>();
@@ -43,13 +46,13 @@ public class SearchableComboBox extends JComboBox<String> {
 
     // 根据输入文本过滤下拉框的内容
     private void filterItems() {
-        DefaultComboBoxModel<String> model = (DefaultComboBoxModel<String>) getModel();
+        DefaultComboBoxModel<T> model = (DefaultComboBoxModel<T>) getModel();
 
         // 如果文本为空，显示所有项；否则，根据文本过滤项
-        List<String> filteredItems = allItems;
+        List<T> filteredItems = allItems;
         if (!StringUtils.isEmpty(currentText)) {
             filteredItems = allItems.stream()
-                    .filter(item -> item.toLowerCase().contains(currentText.toLowerCase()))  // 匹配文本
+                    .filter(item -> item.toString().toLowerCase().contains(currentText.toLowerCase()))  // 匹配文本
                     .toList();
         }
         model.removeAllElements();

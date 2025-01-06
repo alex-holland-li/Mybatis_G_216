@@ -5,16 +5,16 @@
 
     <!-- Public plugin name should be written in Title Case.
          Guidelines: https://plugins.jetbrains.com/docs/marketplace/plugin-overview-page.html#plugin-name -->
-    <name>Mybatis_G_216</name>
+    <name>连接查询代码生成器</name>
 
     <!-- A displayed Vendor name or Organization ID displayed on the Plugins Page. -->
-    <vendor email="support@liyun.com" url="https://www.yourcompany.com">aaaaaaaaaaaa</vendor>
+    <vendor email="htrfg4534@163.com"></vendor>
 
     <!-- Description of the plugin displayed on the Plugin Page and IDE Plugin Manager.
          Simple HTML elements (text formatting, paragraphs, and lists) can be added inside of <![CDATA[ ]]> tag.
          Guidelines: https://plugins.jetbrains.com/docs/marketplace/plugin-overview-page.html#plugin-description -->
     <description><![CDATA[
-    mybatis代码生成好药多好阿戈河和国防建设是咖啡教室的公司的qqqqqqqqqqqqqqqqqqq.<br>
+    快快快快快快快快快快快快快快快快快快快快快快快快快快快快快快快快快快快快好起来<br>
     <em>代码生成</em>
   ]]></description>
 
@@ -49,4 +49,5 @@
                     <add-to-group group-id="DatabaseView.PopupGroup" anchor="last" />
                 </action>-->
     </actions>
+
 </idea-plugin>

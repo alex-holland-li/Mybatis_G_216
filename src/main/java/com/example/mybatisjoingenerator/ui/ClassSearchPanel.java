@@ -7,8 +7,6 @@ import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.*;
 
 import javax.swing.*;
-import javax.swing.event.ListSelectionEvent;
-import javax.swing.event.ListSelectionListener;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -38,6 +36,10 @@ public class ClassSearchPanel extends JPanel {
     private final JLabel fullyQualifiedNameLabel;
     private String currentQuery = "";
     private String title;
+
+    String className;
+    String packageName;
+    String fullyQualifiedName;
 
     public ClassSearchPanel(Project project, String title) {
         this.title = title;
@@ -178,12 +180,9 @@ public class ClassSearchPanel extends JPanel {
         });
 
         // 添加列表选择监听器以显示详细信息
-        classList.addListSelectionListener(new ListSelectionListener() {
-            @Override
-            public void valueChanged(ListSelectionEvent e) {
-                if (!e.getValueIsAdjusting()) {
-                    displayClassDetails(classList.getSelectedValue());
-                }
+        classList.addListSelectionListener(e -> {
+            if (!e.getValueIsAdjusting()) {
+                displayClassDetails(classList.getSelectedValue());
             }
         });
     }
@@ -255,9 +254,9 @@ public class ClassSearchPanel extends JPanel {
             return;
         }
 
-        String className = psiClass.getName();
-        String packageName = getPackageName(psiClass);
-        String fullyQualifiedName = getFullyQualifiedName(psiClass);
+        className = psiClass.getName();
+        packageName = getPackageName(psiClass);
+        fullyQualifiedName = getFullyQualifiedName(psiClass);
 
         // 更新显示组件
         classNameLabel.setText("类名: " + (className != null ? className : "匿名类"));
@@ -409,32 +408,15 @@ public class ClassSearchPanel extends JPanel {
         return currentQuery;
     }
 
-    /**
-     * 获取选中类的类名。
-     *
-     * @return 类名
-     */
+
     public String getSelectedClassName() {
-        return classNameLabel.getText().replace("类名: ", "");
+        return className;
     }
 
-    /**
-     * 获取选中类的包名。
-     *
-     * @return 包名
-     */
-    public String getSelectedPackageName() {
-        return packageNameLabel.getText().replace("包名: ", "");
-    }
-
-    /**
-     * 获取选中类的全限定名。
-     *
-     * @return 全限定名
-     */
     public String getSelectedFullyQualifiedName() {
-        return fullyQualifiedNameLabel.getText().replace("全限定名: ", "");
+        return fullyQualifiedName;
     }
+
 
     /**
      * 搜索类型枚举。

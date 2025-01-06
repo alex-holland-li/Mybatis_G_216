@@ -1,31 +1,24 @@
 package com.example.mybatisjoingenerator.models;
 
+/**
+ * @author 李运
+ */
 public class TableField {
-    private String tableName;
-    private String tableAlias;
-    private String columnName;
+    private final String columnName;
     private String javaFieldName;
-    private String javaType;
-    private boolean isPrimaryKey;
+    private final String javaType;
 
-    public TableField(String tableName, String tableAlias, String columnName, String javaFieldName, String javaType, boolean isPrimaryKey) {
-        this.tableName = tableName;
-        this.tableAlias = tableAlias;
+    private final String comment;
+
+    public TableField(String columnName, String javaFieldName, String javaType, String comment) {
         this.columnName = columnName;
         this.javaFieldName = javaFieldName;
         this.javaType = javaType;
-        this.isPrimaryKey = isPrimaryKey;
+        this.comment = comment;
     }
 
     // Getters and Setters
 
-    public String getTableName() {
-        return tableName;
-    }
-
-    public String getTableAlias() {
-        return tableAlias;
-    }
 
     public String getColumnName() {
         return columnName;
@@ -35,15 +28,26 @@ public class TableField {
         return javaFieldName;
     }
 
-    public void setJavaFieldName(String javaFieldName) {
-        this.javaFieldName = javaFieldName;
-    }
-
     public String getJavaType() {
         return javaType;
     }
 
-    public boolean isPrimaryKey() {
-        return isPrimaryKey;
+    public String getComment() {
+        return comment;
+    }
+
+
+    public void setJavaFieldName(String aValue) {
+        this.javaFieldName = aValue;
+    }
+
+    @Override
+    public String toString() {
+        return "TableField{" +
+                "columnName='" + columnName + '\'' +
+                ", javaFieldName='" + javaFieldName + '\'' +
+                ", javaType='" + javaType + '\'' +
+                ", comment='" + comment + '\'' +
+                '}';
     }
 }

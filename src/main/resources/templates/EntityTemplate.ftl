@@ -1,53 +1,97 @@
 package ${packageName};
 
-<#if useLombok>
+<#-- 导入语句 -->
+<#if createSwagger>
+    import io.swagger.annotations.ApiModel;
+    import io.swagger.annotations.ApiModelProperty;
+</#if>
+<#if createValidator>
+    import javax.validation.constraints.*;
+</#if>
+<#if createLombok>
     import lombok.Data;
 </#if>
-<#if useJpa>
-    import javax.persistence.*;
-</#if>
-<#if javaTypes?seq_contains("LocalDate")>
-    import java.time.LocalDate;
-</#if>
-<#if javaTypes?seq_contains("LocalDateTime")>
-    import java.time.LocalDateTime;
-</#if>
-<#if javaTypes?seq_contains("LocalTime")>
-    import java.time.LocalTime;
-</#if>
 
-<#if useLombok>
-    @Data
-</#if>
-<#if useJpa>
-    @Entity
-    @Table(name = "${tableName}")
+<#if (!isJoinClass!false) && relationType != "普通">
+    import ${joinFullyQualifiedName};
+    <#if isList?? && isList>
+        import java.util.List;
+    </#if>
 </#if>
 
 /**
-* @author Mybatis_G_216
+*
+* @author liyun
 */
+
+<#-- 类注解 -->
+<#if createSwagger>
+    @ApiModel(description = "${className}对象")
+</#if>
+<#if createLombok>
+    @Data
+</#if>
 public class ${className} {
 
+<#-- 字段定义 -->
 <#list fields as field>
-    <#if useJpa>
-        @Column(name = "${field.columnName}")
+    <#if createSwagger && field.swaggerAnnotation??>
+        ${field.swaggerAnnotation}
     </#if>
-    private ${field.javaType} ${field.javaName};
+    <#if createValidator && field.validationAnnotations?? && (field.validationAnnotations?size > 0) >
+        <#list field.validationAnnotations as annotation>
+            ${annotation}
+        </#list>
+    </#if>
+    private ${field.javaType} ${field.javaFieldName};
 
 </#list>
 
-// Getters and Setters (如果不使用 Lombok)
-<#if !useLombok>
+<#-- 关联字段 -->
+<#if (!isJoinClass!false) && relationType != "普通">
+    <#if relationType == "一对一">
+        private ${joinClass} ${joinObjectName};
+    </#if>
+    <#if relationType == "一对多">
+        private List<${joinClass}> ${joinObjectName};
+    </#if>
+</#if>
+
+<#-- Getter 和 Setter 方法（如果未使用 Lombok） -->
+<#if !createLombok>
+    // Getters and Setters
     <#list fields as field>
-        public ${field.javaType} get${field.javaName?cap_first}() {
-        return ${field.javaName};
+        public ${field.javaType} get${field.javaFieldName?cap_first}() {
+        return ${field.javaFieldName};
         }
 
-        public void set${field.javaName?cap_first}(${field.javaType} ${field.javaName}) {
-        this.${field.javaName} = ${field.javaName};
+        public void set${field.javaFieldName?cap_first}(${field.javaType} ${field.javaFieldName}) {
+        this.${field.javaFieldName} = ${field.javaFieldName};
         }
 
     </#list>
+<#-- 关联字段的 Getter 和 Setter -->
+    <#if (!isJoinClass!false) && relationType != "普通">
+        <#if relationType == "一对一">
+            public ${joinClass} get${joinObjectName?cap_first}() {
+            return ${joinObjectName};
+            }
+
+            public void set${joinObjectName?cap_first}(${joinClass} ${joinObjectName}) {
+            this.${joinObjectName} = ${joinObjectName};
+            }
+
+        </#if>
+        <#if relationType == "一对多">
+            public List<${joinClass}> get${joinObjectName?cap_first}List() {
+            return ${joinObjectName}List;
+            }
+
+            public void set${joinObjectName?cap_first}List(List<${joinClass}> ${joinObjectName}List) {
+            this.${joinObjectName}List = ${joinObjectName}List;
+            }
+
+        </#if>
+    </#if>
 </#if>
 }

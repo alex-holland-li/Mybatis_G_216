@@ -1,527 +1,686 @@
 package com.example.mybatisjoingenerator.generators;
 
+import com.example.mybatisjoingenerator.context.DataBaseContext;
+import com.example.mybatisjoingenerator.models.MyBatisGenerationResult;
 import com.example.mybatisjoingenerator.models.TableField;
 import com.example.mybatisjoingenerator.models.UserSelection;
-import com.example.mybatisjoingenerator.models.UserSelection.GenerationType;
+import com.example.mybatisjoingenerator.ui.JavaSelectOrCreatePanel.GeneratedClassInfo;
+import com.example.mybatisjoingenerator.ui.JavaSelectOrCreatePanel.SelectedClassInfo;
+import com.intellij.database.model.DasColumn;
+import com.intellij.database.model.DataType;
+import freemarker.template.Configuration;
+import freemarker.template.Template;
+import freemarker.template.TemplateException;
 
+import java.io.IOException;
+import java.io.StringWriter;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
- * CodeGenerator 类仅负责生成和保存 Java 类
+ * CodeGenerator 类负责生成 MyBatis 的 SELECT 查询、resultMap 和 Mapper 接口方法
  */
 public class CodeGenerator {
 
     private final CodeGeneratorHelper helper = new CodeGeneratorHelper();
+    private final Configuration cfg;
+
+    public CodeGenerator() {
+        cfg = new Configuration(Configuration.VERSION_2_3_31);
+        cfg.setClassForTemplateLoading(this.getClass(), "/templates"); // 确保模板文件在 resources/templates 目录下
+        cfg.setDefaultEncoding("UTF-8");
+    }
 
     /**
-     * 根据用户选择生成 Java 对象
+     * 将数据库表名转换为标准的Java类名（驼峰命名法）
+     *
+     * @param tableName 数据库表名（例如：user_table）
+     * @return 转换后的Java类名（例如：UserTable）
+     */
+    public static String toJavaClassName(String tableName) {
+        StringBuilder className = new StringBuilder();
+        String[] parts = tableName.split("_");
+
+        for (String part : parts) {
+            // 将每个部分的首字母大写，并将其余字母小写
+            className.append(part.substring(0, 1).toUpperCase());
+            className.append(part.substring(1).toLowerCase());
+        }
+
+        return className.toString();
+    }
+
+    public static String toJavaFileName(String tableName) {
+        StringBuilder className = new StringBuilder();
+        String[] parts = tableName.split("_");
+
+        int i = 1;
+        for (String part : parts) {
+            // 将第一个字母的小写
+            if (i++ == 1) {
+                className.append(part.substring(0, 1).toLowerCase());
+            } else {
+                className.append(part.substring(0, 1).toUpperCase());
+            }
+            className.append(part.substring(1).toLowerCase());
+        }
+
+        return className.toString();
+    }
+
+    /**
+     * 根据用户选择生成 MyBatis 相关配置
      *
      * @param selection 用户选择的数据
-     * @return 生成的 Java 类源码字符串
+     * @return 生成的 MyBatis 相关配置封装类
      */
-    public String generate(UserSelection selection) {
-        String savePath = selection.getFilePath();
-        GenerationType generationType = selection.getGenerationType();
+    public MyBatisGenerationResult generate(UserSelection selection) {
+        MyBatisGenerationResult result = new MyBatisGenerationResult();
 
-        StringBuilder allJavaClassesCode = new StringBuilder();
+        // 局部变量保存生成的代码
+        String mainJavaCode = null;
+        String joinJavaCode = null;
 
-        switch (generationType) {
+        switch (selection.getGenerationType()) {
             case GENERATE_NEW_CLASS:
-                // 生成新的 Java 类，并保存
-                String javaClassesCode = generateJavaClasses(selection, savePath);
-                allJavaClassesCode.append(javaClassesCode);
+                if ("普通".equalsIgnoreCase(selection.getRelationType())) {
+                    // 1. GENERATE_NEW_CLASS 且 普通
+                    mainJavaCode = generateJavaClass(selection.getGeneratedClassInfo(), selection);
+                } else if ("一对一".equalsIgnoreCase(selection.getRelationType()) ||
+                        "一对多".equalsIgnoreCase(selection.getRelationType())) {
+                    // 2. GENERATE_NEW_CLASS 且 一对一或一对多
+                    mainJavaCode = generateJavaClass(selection.getGeneratedMainClassInfo(), selection);
+                    joinJavaCode = generateJavaClass(selection.getGeneratedJoinClassInfo(), selection);
+                }
                 break;
             case GENERATE_MAIN_SELECT_JOIN:
-                // 生成主对象类和连接对象类，并保存
-                String mainAndJoinCode = generateMainAndJoinClasses(selection, savePath);
-                allJavaClassesCode.append(mainAndJoinCode);
+                // 3. GENERATE_MAIN_SELECT_JOIN
+                mainJavaCode = generateJavaClass(selection.getGeneratedMainClassInfo(), selection);
                 break;
             case SELECT_EXISTING:
-                // 用户选择现有类，无需生成新的 Java 类
-                allJavaClassesCode.append("// 用户选择了现有的 Java 类，无需生成新的类。\n");
+                // 4. SELECT_EXISTING 且 普通 或 5. SELECT_EXISTing 且 一对一或一对多
+                // 不生成 Java 类，但生成 resultMap
                 break;
             default:
-                throw new IllegalArgumentException("未知的生成类型: " + generationType);
+                throw new IllegalArgumentException("未知的生成类型: " + selection.getGenerationType());
         }
 
-        return allJavaClassesCode.toString();
+        String resultMapCode = generateResultMap(selection);
+
+        // 生成 SELECT 查询
+        String selectSql = generateSelectQuery(selection);
+        // 生成 Mapper 接口方法
+        String mapperMethods = generateMapperInterfaceMethods(selection);
+
+        // 封装生成结果
+        result.setResultMap(resultMapCode);
+        result.setSelectQuery(selectSql);
+        result.setMapperInterface(mapperMethods);
+
+        // 将生成的 Java 代码保存到结果中（如果需要）
+        result.setMainJavaCode(mainJavaCode);
+        result.setJoinJavaCode(joinJavaCode);
+
+        return result;
     }
 
     /**
-     * 生成 Java 类
-     * 仅用于 GENERATE_NEW_CLASS
+     * 生成 Java 类并保存到文件
+     *
+     * @param classInfo 生成类的信息
+     * @param selection 用户选择的数据
+     * @return
+     */
+    private String generateJavaClass(GeneratedClassInfo classInfo, UserSelection selection) {
+        try {
+            // 加载模板
+            Template template = cfg.getTemplate("EntityTemplate.ftl");
+
+            // 准备数据模型
+            Map<String, Object> templateData = prepareTemplateData(selection, classInfo);
+
+            // 生成代码
+            StringWriter out = new StringWriter();
+            template.process(templateData, out);
+            String classCode = out.toString();
+
+            // 保存生成的类
+            helper.saveFile(classInfo.getSavePath(),
+                    classInfo.getClassName() + ".java", classCode);
+
+            return classCode;
+
+        } catch (IOException | TemplateException e) {
+            e.printStackTrace();
+            System.err.println("生成 Java 类时发生错误: " + e.getMessage());
+        }
+        return null;
+    }
+
+    /**
+     * 生成 SELECT 查询语句
      *
      * @param selection 用户选择的数据
-     * @param savePath  保存路径
-     * @return 生成的 Java 类源码字符串
+     * @return 生成的 SELECT 查询语句字符串
      */
-    public String generateJavaClasses(UserSelection selection, String savePath) {
-        String className = capitalize(selection.getRootObjectName());
-        String packageName = selection.getRootObjectName(); // 假设 rootObjectName 是包名
-        StringBuilder classCode = new StringBuilder();
-        classCode.append(String.format("package %s;\n\n", packageName));
+    private String generateSelectQuery(UserSelection selection) {
+        try {
+            Template selectTemplate = cfg.getTemplate("SelectSqlTemplate.ftl");
 
-        // 添加必要的导入语句
-        List<String> imports = collectImports(selection);
-        for (String imp : imports) {
-            classCode.append("import ").append(imp).append(";\n");
+            Map<String, Object> selectData = new HashMap<>();
+            selectData.put("id", getSelectId(selection));
+            selectData.put("resultMapId", getResultMapId(selection));
+
+
+            // 构建 SELECT 字段部分
+            String selectFields = buildSelectFieldsForMyBatis(selection.getSelectedMainFields(), selection.getMainTableAlias());
+            selectFields += ",\n\t" + buildSelectFieldsForMyBatis(selection.getSelectedJoinFields(), selection.getJoinTableAlias());
+            selectData.put("selectFields", selectFields);
+
+            selectData.put("from", createFromClause(selection));
+
+            // 构建 JOIN 子句
+            String joinClause = buildJoinClause(selection, selection.getJoinTableAlias());
+            selectData.put("joinClause", joinClause);
+
+            // 生成 SELECT SQL
+            StringWriter selectOut = new StringWriter();
+            selectTemplate.process(selectData, selectOut);
+            return selectOut.toString();
+
+        } catch (IOException | TemplateException e) {
+            e.printStackTrace();
+            return "// 生成 SELECT 查询时发生错误：" + e.getMessage();
         }
-        if (!imports.isEmpty()) {
-            classCode.append("\n");
+    }
+
+    private String getResultMapId(UserSelection selection) {
+        return getSelectId(selection) + "ResultMap";
+    }
+
+    private String getSelectId(UserSelection selection) {
+        return "select" + toJavaClassName(selection.getMainTable()) + "With" + toJavaClassName(selection.getJoinTable());
+    }
+
+    private String createFromClause(UserSelection selection) {
+        String mainTableAlias = selection.getMainTableAlias();
+        if (mainTableAlias != null && mainTableAlias.trim().length() > 0
+                && !mainTableAlias.equalsIgnoreCase(selection.getMainTable())) {
+            return selection.getMainTable() + " AS " + mainTableAlias;
+
         }
-
-        // 添加类注解
-        if (selection.isCreateSwagger()) {
-            classCode.append("@ApiModel(description = \"").append(className).append("对象\")\n");
-        }
-        if (selection.isCreateLombok()) {
-            classCode.append("@Data\n"); // Lombok 的@Data注解
-        }
-
-        // 添加类声明
-        classCode.append(String.format("public class %s {\n\n", className));
-
-        // 添加主表字段
-        for (TableField field : selection.getSelectedMainFields()) {
-            // 添加注解（例如 Swagger 和 Validator）
-            if (selection.isCreateSwagger()) {
-                classCode.append("    @ApiModelProperty(value = \"").append(field.getJavaFieldName()).append("\")\n");
-            }
-            if (selection.isCreateValidator()) {
-                // 根据需要，可以添加不同类型的校验注解
-                // 这里以非空校验为例
-                classCode.append("    @NotNull\n");
-            }
-
-            classCode.append(String.format("    private %s %s;\n",
-                    field.getJavaType(), field.getJavaFieldName()));
-        }
-
-        // 根据关联关系类型生成 Java 类结构
-        String relationType = selection.getRelationType();  // 获取关联关系类型
-        if ("一对一".equalsIgnoreCase(relationType)) {
-            // 一对一：副表字段封装成一个独立的内部类
-            String joinClassName = capitalize(selection.getJoinObjectName());
-            classCode.append(String.format("    private %s %s;\n", joinClassName, toCamelCase(selection.getJoinObjectName())));
-        } else if ("一对多".equalsIgnoreCase(relationType)) {
-            // 一对多：副表字段封装成 List
-            String joinClassName = capitalize(selection.getJoinObjectName());
-            classCode.append(String.format("    private List<%s> %sList;\n", joinClassName, toCamelCase(selection.getJoinObjectName())));
-        } else {
-            // 普通：副表字段直接作为成员变量
-            for (TableField field : selection.getSelectedJoinFields()) {
-                // 添加注解
-                if (selection.isCreateSwagger()) {
-                    classCode.append("    @ApiModelProperty(value = \"").append(field.getJavaFieldName()).append("\")\n");
-                }
-                if (selection.isCreateValidator()) {
-                    classCode.append("    @NotNull\n");
-                }
-
-                classCode.append(String.format("    private %s %s;\n",
-                        field.getJavaType(), field.getJavaFieldName()));
-            }
-        }
-
-        // 添加 Getter 和 Setter 方法（如果没有使用 Lombok）
-        if (!selection.isCreateLombok()) {
-            classCode.append("\n    // Getters and Setters\n");
-            for (TableField field : selection.getSelectedMainFields()) {
-                String camelField = capitalize(field.getJavaFieldName());
-                classCode.append(String.format("    public %s get%s() {\n        return %s;\n    }\n\n",
-                        field.getJavaType(), camelField, field.getJavaFieldName()));
-                classCode.append(String.format("    public void set%s(%s %s) {\n        this.%s = %s;\n    }\n\n",
-                        camelField, field.getJavaType(), field.getJavaFieldName(),
-                        field.getJavaFieldName(), field.getJavaFieldName()));
-            }
-
-            for (TableField field : selection.getSelectedJoinFields()) {
-                String camelField = capitalize(field.getJavaFieldName());
-                classCode.append(String.format("    public %s get%s() {\n        return %s;\n    }\n\n",
-                        field.getJavaType(), camelField, field.getJavaFieldName()));
-                classCode.append(String.format("    public void set%s(%s %s) {\n        this.%s = %s;\n    }\n\n",
-                        camelField, field.getJavaType(), field.getJavaFieldName(),
-                        field.getJavaFieldName(), field.getJavaFieldName()));
-            }
-        }
-
-        // 添加副表类到最后
-        if ("一对一".equalsIgnoreCase(relationType)) {
-            generateInnerClass(classCode, capitalize(selection.getJoinObjectName()), selection, false);  // 一对一，生成非List的副表类
-        } else if ("一对多".equalsIgnoreCase(relationType)) {
-            generateInnerClass(classCode, capitalize(selection.getJoinObjectName()), selection, true);  // 一对多，生成List的副表类
-        }
-
-        classCode.append("}\n");
-
-        // 保存生成的类
-        helper.saveJavaFile(savePath, className + ".java", classCode.toString());
-
-        return classCode.toString(); // 返回生成的类源码
+        return selection.getMainTable();
     }
 
     /**
-     * 生成主对象类和连接对象类
+     * 生成 resultMap
      *
      * @param selection 用户选择的数据
-     * @param savePath  保存路径
-     * @return 生成的所有 Java 类源码字符串
+     * @return 生成的 resultMap 字符串
      */
-    public String generateMainAndJoinClasses(UserSelection selection, String savePath) {
-        StringBuilder allClassesCode = new StringBuilder();
+    private String generateResultMap(UserSelection selection) {
+        try {
+            Template resultMapTemplate = cfg.getTemplate("ResultMapTemplate.ftl");
 
-        // 生成主对象类
-        String mainClassCode = generateJavaClasses(selection, savePath);
-        allClassesCode.append(mainClassCode);
+            Map<String, Object> resultMapData = new HashMap<>();
+            resultMapData.put("resultMapId", getResultMapId(selection));
+            resultMapData.put("mainClass", getMainClassFullyQualifiedName(selection));
+            resultMapData.put("mainAlias", selection.getMainTableAlias());
+            resultMapData.put("relationType", selection.getRelationType());
 
-        // 生成连接对象类（如果有）
-        if ("一对一".equalsIgnoreCase(selection.getRelationType()) || "一对多".equalsIgnoreCase(selection.getRelationType())) {
-            String joinClassName = capitalize(selection.getJoinObjectName());
-            String packageName = selection.getJoinObjectName(); // 假设 joinObjectName 是包名
-            StringBuilder joinClassCode = new StringBuilder();
-            joinClassCode.append(String.format("package %s;\n\n", packageName));
+            // 主表字段
+            List<Map<String, Object>> mainFields = selection.getSelectedMainFields().stream()
+                    .map(field -> {
+                        Map<String, Object> map = new HashMap<>();
+                        map.put("columnName", field.getColumnName());
+                        map.put("javaFieldName", field.getJavaFieldName());
+                        return map;
+                    })
+                    .collect(Collectors.toList());
+            resultMapData.put("mainFields", mainFields);
 
-            // 添加必要的导入语句
-            List<String> imports = collectImportsForJoinClass(selection);
-            for (String imp : imports) {
-                joinClassCode.append("import ").append(imp).append(";\n");
-            }
-            if (!imports.isEmpty()) {
-                joinClassCode.append("\n");
-            }
+            List<Map<String, Object>> joinFields = selection.getSelectedJoinFields().stream()
+                    .map(field -> {
+                        Map<String, Object> map = new HashMap<>();
+                        map.put("columnName", field.getColumnName());
+                        map.put("javaFieldName", field.getJavaFieldName());
+                        return map;
+                    })
+                    .collect(Collectors.toList());
+            resultMapData.put("joinAlias", selection.getJoinTableAlias());
+            resultMapData.put("joinFields", joinFields);
+            resultMapData.put("joinObjectName", getJoinObjectName(selection));
+            resultMapData.put("joinClass", getJoinFullyQualifiedName(selection));
 
-            // 添加类注解
-            if (selection.isCreateSwagger()) {
-                joinClassCode.append("@ApiModel(description = \"").append(joinClassName).append("对象\")\n");
-            }
-            if (selection.isCreateLombok()) {
-                joinClassCode.append("@Data\n"); // Lombok 的@Data注解
-            }
 
-            // 添加类声明
-            joinClassCode.append(String.format("public class %s {\n\n", joinClassName));
+            // 生成 resultMap
+            StringWriter resultMapOut = new StringWriter();
+            resultMapTemplate.process(resultMapData, resultMapOut);
+            return resultMapOut.toString();
 
-            // 添加连接对象类字段
-            for (TableField field : selection.getSelectedJoinFields()) {
-                // 添加注解
-                if (selection.isCreateSwagger()) {
-                    joinClassCode.append("    @ApiModelProperty(value = \"").append(field.getJavaFieldName()).append("\")\n");
-                }
-                if (selection.isCreateValidator()) {
-                    joinClassCode.append("    @NotNull\n");
-                }
-
-                joinClassCode.append(String.format("    private %s %s;\n",
-                        field.getJavaType(), field.getJavaFieldName()));
-            }
-
-            // 添加 Getter 和 Setter 方法（如果没有使用 Lombok）
-            if (!selection.isCreateLombok()) {
-                joinClassCode.append("\n    // Getters and Setters\n");
-                for (TableField field : selection.getSelectedJoinFields()) {
-                    String camelField = capitalize(field.getJavaFieldName());
-                    joinClassCode.append(String.format("    public %s get%s() {\n        return %s;\n    }\n\n",
-                            field.getJavaType(), camelField, field.getJavaFieldName()));
-                    joinClassCode.append(String.format("    public void set%s(%s %s) {\n        this.%s = %s;\n    }\n\n",
-                            camelField, field.getJavaType(), field.getJavaFieldName(),
-                            field.getJavaFieldName(), field.getJavaFieldName()));
-                }
-            }
-
-            // 结束连接对象类定义
-            joinClassCode.append("}\n");
-
-            // 保存连接对象类代码
-            helper.saveJavaFile(savePath, joinClassName + ".java", joinClassCode.toString());
-
-            allClassesCode.append(joinClassCode.toString());
+        } catch (IOException | TemplateException e) {
+            e.printStackTrace();
+            return "// 生成 resultMap 时发生错误：" + e.getMessage();
         }
-
-        return allClassesCode.toString();
     }
 
-    /**
-     * 收集生成 Java 类所需的导入语句
-     */
-    private List<String> collectImports(UserSelection selection) {
-        List<String> imports = new ArrayList<>();
-
-        if (selection.isCreateSwagger()) {
-            imports.add("io.swagger.annotations.ApiModel");
-            imports.add("io.swagger.annotations.ApiModelProperty");
+    private String getMainClassFullyQualifiedName(UserSelection selection) {
+        if (selection.getSelectedMainClassInfo() != null) {
+            return getMainClassFullyQualifiedName(selection.getSelectedMainClassInfo());
+        } else if (selection.getGeneratedMainClassInfo() != null) {
+            return getMainClassFullyQualifiedName(selection.getGeneratedMainClassInfo());
+        } else if (selection.getGeneratedClassInfo() != null) {
+            return getMainClassFullyQualifiedName(selection.getGeneratedClassInfo());
+        } else if (selection.getSelectedClassInfo() != null) {
+            return getMainClassFullyQualifiedName(selection.getSelectedClassInfo());
         }
-
-        if (selection.isCreateValidator()) {
-            imports.add("javax.validation.constraints.NotNull");
-        }
-
-        if (selection.isCreateLombok()) {
-            imports.add("lombok.Data");
-        }
-
-        // 根据需要添加其他导入
-        for (TableField field : selection.getSelectedMainFields()) {
-            switch (field.getJavaType()) {
-                case "BigDecimal":
-                    imports.add("java.math.BigDecimal");
-                    break;
-                case "LocalDate":
-                    imports.add("java.time.LocalDate");
-                    break;
-                case "LocalDateTime":
-                    imports.add("java.time.LocalDateTime");
-                    break;
-                case "LocalTime":
-                    imports.add("java.time.LocalTime");
-                    break;
-                // 添加其他需要的导入
-                default:
-                    break;
-            }
-        }
-
-        for (TableField field : selection.getSelectedJoinFields()) {
-            switch (field.getJavaType()) {
-                case "BigDecimal":
-                    imports.add("java.math.BigDecimal");
-                    break;
-                case "LocalDate":
-                    imports.add("java.time.LocalDate");
-                    break;
-                case "LocalDateTime":
-                    imports.add("java.time.LocalDateTime");
-                    break;
-                case "LocalTime":
-                    imports.add("java.time.LocalTime");
-                    break;
-                // 添加其他需要的导入
-                default:
-                    break;
-            }
-        }
-
-        if ("一对多".equalsIgnoreCase(selection.getRelationType())) {
-            imports.add("java.util.List");
-        }
-
-        return imports.stream().distinct().collect(Collectors.toList());
-    }
-
-    /**
-     * 收集生成连接类所需的导入语句
-     */
-    private List<String> collectImportsForJoinClass(UserSelection selection) {
-        List<String> imports = new ArrayList<>();
-
-        if (selection.isCreateSwagger()) {
-            imports.add("io.swagger.annotations.ApiModel");
-            imports.add("io.swagger.annotations.ApiModelProperty");
-        }
-
-        if (selection.isCreateValidator()) {
-            imports.add("javax.validation.constraints.NotNull");
-        }
-
-        if (selection.isCreateLombok()) {
-            imports.add("lombok.Data");
-        }
-
-        // 根据需要添加其他导入
-        for (TableField field : selection.getSelectedJoinFields()) {
-            switch (field.getJavaType()) {
-                case "BigDecimal":
-                    imports.add("java.math.BigDecimal");
-                    break;
-                case "LocalDate":
-                    imports.add("java.time.LocalDate");
-                    break;
-                case "LocalDateTime":
-                    imports.add("java.time.LocalDateTime");
-                    break;
-                case "LocalTime":
-                    imports.add("java.time.LocalTime");
-                    break;
-                // 添加其他需要的导入
-                default:
-                    break;
-            }
-        }
-
-        return imports.stream().distinct().collect(Collectors.toList());
-    }
-
-    /**
-     * 生成副表内部类
-     */
-    private void generateInnerClass(StringBuilder classCode, String joinClassName, UserSelection selection, boolean isList) {
-        classCode.append("\n    // 副表类：").append(joinClassName).append("\n");
-        classCode.append(String.format("    public static class %s {\n", joinClassName));
-
-        // 添加副表字段
-        for (TableField field : selection.getSelectedJoinFields()) {
-            // 添加注解
-            if (selection.isCreateSwagger()) {
-                classCode.append("        @ApiModelProperty(value = \"").append(field.getJavaFieldName()).append("\")\n");
-            }
-            if (selection.isCreateValidator()) {
-                classCode.append("        @NotNull\n");
-            }
-
-            classCode.append(String.format("        private %s %s;\n", field.getJavaType(), field.getJavaFieldName()));
-        }
-
-        // 添加 Getter 和 Setter 方法（如果没有使用 Lombok）
-        if (!selection.isCreateLombok()) {
-            classCode.append("\n        // Getters and Setters\n");
-            for (TableField field : selection.getSelectedJoinFields()) {
-                String camelField = capitalize(field.getJavaFieldName());
-                classCode.append(String.format("        public %s get%s() {\n            return %s;\n        }\n\n",
-                        field.getJavaType(), camelField, field.getJavaFieldName()));
-                classCode.append(String.format("        public void set%s(%s %s) {\n            this.%s = %s;\n        }\n\n",
-                        camelField, field.getJavaType(), field.getJavaFieldName(),
-                        field.getJavaFieldName(), field.getJavaFieldName()));
-            }
-        }
-
-        // 结束副表类定义
-        classCode.append("    }\n");
-    }
-
-    /**
-     * 生成 MyBatis SQL 和 ResultMap 供用户复制
-     * 注意：这些方法不保存任何文件，只返回字符串
-     */
-
-    /**
-     * 生成 MyBatis XML 查询动态 SQL
-     */
-    public String generateSelectQuery(UserSelection selection) {
-        String mainAlias = selection.getMainTableAlias();
-        String joinAlias = selection.getJoinTableAlias();
-        String relationType = selection.getRelationType();
-
-        // 构建 SELECT 字段部分
-        String selectFields = buildSelectFields(selection.getSelectedMainFields(), mainAlias)
-                + ",\n"
-                + buildSelectFields(selection.getSelectedJoinFields(), joinAlias);
-
-        // 构建 FROM 子句
-        // 如果表别名和表名一样，就不用指定表别名
-        String fromClause = selection.getMainTable().equals(mainAlias) ?
-                String.format("FROM %s ", selection.getMainTable()) : String.format("FROM %s AS %s", selection.getMainTable(), mainAlias);
-
-        // 构建 JOIN 子句
-        String joinClause = buildJoinClause(selection, joinAlias);
-
-        // 构建 WHERE 子句（可根据需要扩展）
-        String whereClause = "<where>\n        <!-- 添加查询条件 -->\n    </where>";
-
-        // 完整的 SELECT 语句
-        String selectQuery = String.format("<select id=\"select%sJoin\" parameterType=\"map\" resultMap=\"%sResultMap\">\n",
-                capitalize(mainAlias), mainAlias)
-                + "    SELECT\n"
-                + selectFields + "\n"
-                + fromClause + "\n"
-                + joinClause + "\n"
-                + whereClause + "\n"
-                + "</select>";
-
-        return selectQuery;
-    }
-
-    /**
-     * 生成 MyBatis XML resultMap
-     */
-    public String generateResultMap(UserSelection selection) {
-        String mainAlias = selection.getMainTableAlias();
-        String joinAlias = selection.getJoinTableAlias();
-        String relationType = selection.getRelationType();  // 获取关联关系类型
-
-        // 构建 resultMap 开头
-        StringBuilder resultMap = new StringBuilder();
-        resultMap.append(String.format("<resultMap id=\"%sResultMap\" type=\"%s\">\n", mainAlias, capitalize(selection.getMainTable())));
-
-        // 添加主表字段映射
-        for (TableField field : selection.getSelectedMainFields()) {
-            resultMap.append(String.format("    <result column=\"%s_%s\" property=\"%s\" />\n",
-                    mainAlias, field.getColumnName(), field.getJavaFieldName()));
-        }
-
-        // 根据关联关系类型进行不同的处理
-        if ("一对一".equalsIgnoreCase(relationType)) {
-            // 一对一：副表字段封装成嵌套对象，使用 association
-            resultMap.append(String.format("    <association property=\"%s\" javaType=\"%s\">\n",
-                    toCamelCase(selection.getJoinObjectName()), capitalize(selection.getJoinObjectName())));  // 为副表创建嵌套对象
-
-            // 映射副表字段到主表中的属性
-            for (TableField field : selection.getSelectedJoinFields()) {
-                resultMap.append(String.format("        <result column=\"%s_%s\" property=\"%s\" />\n",
-                        joinAlias, field.getColumnName(), field.getJavaFieldName()));
-            }
-            resultMap.append("    </association>\n");
-        } else if ("一对多".equalsIgnoreCase(relationType)) {
-            // 一对多：使用 collection 来处理副表字段
-            resultMap.append(String.format("    <collection property=\"%sList\" ofType=\"%s\">\n",
-                    toCamelCase(selection.getJoinObjectName()), capitalize(selection.getJoinObjectName())));
-            for (TableField field : selection.getSelectedJoinFields()) {
-                resultMap.append(String.format("        <result column=\"%s_%s\" property=\"%s\" />\n",
-                        joinAlias, field.getColumnName(), field.getJavaFieldName()));
-            }
-            resultMap.append("    </collection>\n");
-        } else {
-            // 普通：副表字段直接映射
-            for (TableField field : selection.getSelectedJoinFields()) {
-                resultMap.append(String.format("    <result column=\"%s_%s\" property=\"%s\" />\n",
-                        joinAlias, field.getColumnName(), field.getJavaFieldName()));
-            }
-        }
-
-        resultMap.append("</resultMap>");
-        return resultMap.toString();
+        return "";
     }
 
     /**
      * 生成 Mapper 接口方法
-     * 这里只生成方法部分，不生成整个接口类
+     *
+     * @param selection 用户选择的数据
+     * @return 生成的接口方法代码字符串
      */
-    public String generateMapperInterface(UserSelection selection) {
-        StringBuilder methodsCode = new StringBuilder();
+    private String generateMapperInterfaceMethods(UserSelection selection) {
 
-        // 生成查询主表列表的方法
-        String mainTable = capitalize(selection.getMainTable());
-        String methodName = "select" + mainTable + "List";
-        methodsCode.append(String.format("    List<%s> %s(Map<String, Object> params);\n", mainTable, methodName));
+        //生成接口：返回参数 方法名 ()
+        StringBuilder methodsCode = new StringBuilder();
+        methodsCode.append("\n\t");
+        methodsCode.append("    ");
 
         // 根据关联关系生成相应的方法
         String relationType = selection.getRelationType();
-        String joinTable = capitalize(selection.getJoinObjectName());
+        UserSelection.GenerationType generationType = selection.getGenerationType();
 
-        if ("一对一".equalsIgnoreCase(relationType)) {
-            String methodNameOneToOne = "select" + joinTable + "ById";
-            methodsCode.append(String.format("    %s %s(int id);\n", joinTable, methodNameOneToOne));
-        } else if ("一对多".equalsIgnoreCase(relationType)) {
-            String methodNameOneToMany = "select" + joinTable + "ListByParentId";
-            methodsCode.append(String.format("    List<%s> %s(int parentId);\n", joinTable, methodNameOneToMany));
+        switch (relationType) {
+            case "一对一", "一对多" -> {
+                if (generationType == UserSelection.GenerationType.GENERATE_NEW_CLASS) {
+                    // 生成两个新类
+                    methodsCode.append(getMainClassName(selection.getGeneratedMainClassInfo()));
+                    methodsCode.append(" ");
+                } else if (generationType == UserSelection.GenerationType.SELECT_EXISTING) {
+                    //选择两个类
+                    methodsCode.append(getMainClassName(selection.getSelectedMainClassInfo()));
+                    methodsCode.append(" ");
+
+                } else if (generationType == UserSelection.GenerationType.GENERATE_MAIN_SELECT_JOIN) {
+                    methodsCode.append(getMainClassName(selection.getGeneratedMainClassInfo()));
+                    methodsCode.append(" ");
+                }
+            }
+            case "普通" -> {
+                if (generationType == UserSelection.GenerationType.GENERATE_NEW_CLASS) {
+                    // 生成一个类
+                    methodsCode.append(getMainClassName(selection.getGeneratedClassInfo()));
+                    methodsCode.append(" ");
+                } else if (generationType == UserSelection.GenerationType.SELECT_EXISTING) {
+                    //选择一个类
+                    methodsCode.append(getMainClassName(selection.getSelectedClassInfo()));
+                    methodsCode.append(" ");
+                }
+            }
+            default -> {
+            }
         }
+
+        //方法名
+        methodsCode.append(getSelectId(selection));
+        methodsCode.append("();\n\t");
 
         return methodsCode.toString();  // 返回生成的接口方法代码
     }
 
+    private String getMainClassName(SelectedClassInfo selectedMainClassInfo) {
+        return selectedMainClassInfo.getClassName();
+    }
+
+    private String getMainClassFullyQualifiedName(SelectedClassInfo selectedMainClassInfo) {
+        return selectedMainClassInfo.getFullyQualifiedName();
+    }
+
+    private String getMainClassName(GeneratedClassInfo generatedMainClassInfo) {
+        return generatedMainClassInfo.getClassName();
+    }
+
+    private String getMainClassFullyQualifiedName(GeneratedClassInfo generatedMainClassInfo) {
+        return generatedMainClassInfo.getPackageName() + "." + generatedMainClassInfo.getClassName();
+    }
+
     /**
-     * 生成完整的 Mapper 接口代码，包括接口声明和方法
+     * 生成校验注解列表
+     *
+     * @param selection 用户选择的数据
+     * @param classInfo 生成类的信息
+     * @param field     表字段信息
+     * @return 校验注解的字符串列表
      */
-    public String generateMapperInterfaceFull(UserSelection selection) {
-        String mapperName = capitalize(selection.getMainTable()) + "Mapper";
-        String mainClass = capitalize(selection.getMainTable());
+    private List<String> generateValidationAnnotations(UserSelection selection, GeneratedClassInfo classInfo, TableField field) {
 
-        StringBuilder mapperCode = new StringBuilder();
-        mapperCode.append(String.format("public interface %s {\n\n", mapperName));
-        mapperCode.append(generateMapperInterface(selection));
-        mapperCode.append("\n}");
+        // 确定字段所属的表名
+        String tableName;
+        if (classInfo.isJoinClass()) {
+            tableName = selection.getJoinTable();
+        } else {
+            tableName = selection.getMainTable();
+        }
 
-        return mapperCode.toString();
+        // 使用 DataBaseContext 获取 DasColumn 对象
+        DasColumn dasColumn = DataBaseContext.getColumn(
+                selection.getSelectedDatabase(),
+                selection.getSelectedSchema(),
+                tableName,
+                field.getColumnName()
+        );
+
+        return createValidationAnnotations(dasColumn);
+
+    }
+
+
+    /**
+     * 根据 DasColumn 信息生成参数校验注解列表
+     *
+     * @param dasColumn 数据库列信息
+     * @return 校验注解列表
+     */
+    private List<String> createValidationAnnotations(DasColumn dasColumn) {
+        List<String> annotations = new ArrayList<>();
+
+        if (dasColumn == null) {
+            return annotations; // 返回空列表，不添加任何注解
+        }
+
+        // 检查是否为 NOT NULL
+        if (dasColumn.isNotNull()) {
+            annotations.add("@NotNull");
+        }
+
+        // 获取列的数据类型
+        String dataType = dasColumn.getDataType().typeName.toLowerCase();
+
+        // 处理 'tinyint(1)' 为 Boolean
+        if (dataType.startsWith("tinyint") && dasColumn.getDataType().size == 1) {
+            dataType = "boolean";
+        } else {
+            // 去掉 'unsigned' 和长度规范（例如： "bigint unsigned" -> "bigint"）
+            dataType = dataType.replaceAll("\\s+unsigned", "").split("\\(")[0].trim();
+        }
+
+        // 获取 DataType 的相关信息
+        DataType typeInfo = dasColumn.getDataType();
+        int size = typeInfo.size;
+        int scale = typeInfo.scale;
+        List<String> enumValues = typeInfo.enumValues;
+
+        // 根据 dataType 和 DataType 信息生成参数校验规则注解
+        switch (dataType) {
+            case "boolean":
+                // 通常不需要额外的校验注解
+                break;
+
+            // 整型
+            case "tinyint":
+            case "smallint":
+            case "mediumint":
+            case "int":
+            case "integer":
+            case "bigint":
+                //addIntegerAnnotations(annotations, dataType);
+                break;
+
+            // 浮点型
+            case "float":
+            case "double":
+            case "decimal":
+            case "numeric":
+                addFloatingPointAnnotations(annotations, dataType, size, scale);
+                break;
+
+            // 日期和时间类型
+            case "date":
+            case "datetime":
+            case "timestamp":
+                //annotations.add("@PastOrPresent"); // 根据具体需求调整
+                break;
+            case "time":
+                // 使用 @Pattern 校验时间格式，例如 "HH:mm:ss"
+                annotations.add("@Pattern(regexp = \"^(?:[01]\\d|2[0-3]):(?:[0-5]\\d):(?:[0-5]\\d)$\", message = \"时间格式必须为 HH:mm:ss\")");
+                break;
+            case "year":
+                // 假设年份在某个合理范围内，可以根据 size 调整
+                //annotations.add("@Min(value = 1900)");
+                //annotations.add("@Max(value = 2100)");
+                break;
+
+            // 字符串类型
+            case "varchar":
+            case "char":
+            case "text":
+            case "tinytext":
+            case "mediumtext":
+            case "longtext":
+                if (size > 0) {
+                    annotations.add("@Size(max = " + size + ")");
+                }
+                break;
+
+            // 二进制类型
+            case "binary":
+            case "varbinary":
+            case "tinyblob":
+            case "blob":
+            case "mediumblob":
+            case "longblob":
+                // 通常不需要标准的 Bean Validation 注解
+                break;
+
+            // ENUM 类型
+            case "enum":
+                if (enumValues != null && !enumValues.isEmpty()) {
+                    String regex = buildEnumRegex(enumValues);
+                    annotations.add("@Pattern(regexp = \"" + regex + "\", message = \"值必须为 " + enumValues + "\")");
+                }
+                break;
+
+            // SET 类型
+            case "set":
+                if (enumValues != null && !enumValues.isEmpty()) {
+                    String regex = buildSetRegex(enumValues);
+                    annotations.add("@Pattern(regexp = \"" + regex + "\", message = \"值必须为 " + enumValues + " 的组合\")");
+                }
+                break;
+
+            // JSON 类型
+            case "json":
+                // 简单校验 JSON 字符串格式
+                annotations.add("@Pattern(regexp = \"^\\\\{.*\\\\}$\", message = \"必须是有效的 JSON 字符串\")");
+                break;
+
+            // 空间类型
+            case "geometry":
+            case "point":
+            case "linestring":
+            case "polygon":
+            case "multipoint":
+            case "multilinestring":
+            case "multipolygon":
+            case "geometrycollection":
+                // 空间类型通常不需要标准的 Bean Validation 注解
+                break;
+
+            default:
+                System.err.println("警告: 未处理的数据类型 " + dataType + "。将不添加校验注解。");
+        }
+
+        return annotations;
+    }
+
+    /**
+     * 为整型数据类型添加 @Min 和 @Max 注解
+     *
+     * @param annotations 校验注解列表
+     * @param dataType    数据类型
+     */
+    private void addIntegerAnnotations(List<String> annotations, String dataType) {
+        switch (dataType) {
+            case "tinyint":
+                annotations.add("@Min(value = -128)");
+                annotations.add("@Max(value = 127)");
+                break;
+            case "smallint":
+                annotations.add("@Min(value = -32768)");
+                annotations.add("@Max(value = 32767)");
+                break;
+            case "mediumint":
+                annotations.add("@Min(value = -8388608)");
+                annotations.add("@Max(value = 8388607)");
+                break;
+            case "int":
+            case "integer":
+                annotations.add("@Min(value = -2147483648)");
+                annotations.add("@Max(value = 2147483647)");
+                break;
+            case "bigint":
+                annotations.add("@Min(value = -9223372036854775808L)");
+                annotations.add("@Max(value = 9223372036854775807L)");
+                break;
+            default:
+                // 如果有其他整型类型，可以在这里处理
+                break;
+        }
+    }
+
+    /**
+     * 为浮点型数据类型添加相应的校验注解
+     *
+     * @param annotations 校验注解列表
+     * @param dataType    数据类型
+     * @param size        总位数
+     * @param scale       小数位数
+     */
+    private void addFloatingPointAnnotations(List<String> annotations, String dataType, int size, int scale) {
+        switch (dataType) {
+            case "float":
+                // @DecimalMin 和 @DecimalMax 根据具体需求设置
+                //annotations.add("@DecimalMin(value = \"-3.4028235E38\")");
+                //annotations.add("@DecimalMax(value = \"3.4028235E38\")");
+                break;
+            case "double":
+                //annotations.add("@DecimalMin(value = \"-1.7976931348623157E308\")");
+                //annotations.add("@DecimalMax(value = \"1.7976931348623157E308\")");
+                break;
+            case "decimal":
+            case "numeric":
+                if (size > 0 && scale >= 0) {
+                    annotations.add("@Digits(integer = " + (size - scale) + ", fraction = " + scale + ")");
+                }
+                break;
+            default:
+                break;
+        }
+    }
+
+    /**
+     * 构建 ENUM 类型的正则表达式
+     *
+     * @param enumValues ENUM 的可选值
+     * @return 正则表达式字符串
+     */
+    private String buildEnumRegex(List<String> enumValues) {
+        StringBuilder regex = new StringBuilder("^(");
+        for (int i = 0; i < enumValues.size(); i++) {
+            regex.append(Pattern.quote(enumValues.get(i)));
+            if (i < enumValues.size() - 1) {
+                regex.append("|");
+            }
+        }
+        regex.append(")$");
+        return regex.toString();
+    }
+
+    /**
+     * 构建 SET 类型的正则表达式
+     *
+     * @param enumValues SET 的可选值
+     * @return 正则表达式字符串
+     */
+    private String buildSetRegex(List<String> enumValues) {
+        StringBuilder regex = new StringBuilder("^(?:" + String.join("|", enumValues) + ")(?:,(?:" + String.join("|", enumValues) + "))*$");
+        return regex.toString();
+    }
+
+    /**
+     * 准备模板数据用于生成 Java 类
+     *
+     * @param selection 用户选择的数据
+     * @param classInfo 生成类的信息
+     * @return 数据模型
+     */
+    private Map<String, Object> prepareTemplateData(UserSelection selection, GeneratedClassInfo classInfo) {
+        Map<String, Object> data = new HashMap<>();
+
+        data.put("packageName", classInfo.getPackageName());
+        data.put("className", classInfo.getClassName());
+        data.put("createSwagger", selection.isCreateSwagger());
+        data.put("createValidator", selection.isCreateValidator());
+        data.put("createLombok", selection.isCreateLombok());
+        data.put("relationType", selection.getRelationType());
+
+        // 处理字段
+        List<Map<String, Object>> fields = new ArrayList<>();
+        List<TableField> selectedFields;
+        if (classInfo.isJoinClass()) {
+            selectedFields = selection.getSelectedJoinFields();
+        } else {
+            selectedFields = selection.getSelectedMainFields();
+        }
+
+        for (TableField field : selectedFields) {
+            Map<String, Object> fieldData = new HashMap<>();
+            fieldData.put("javaType", field.getJavaType());
+            fieldData.put("javaFieldName", field.getJavaFieldName());
+
+            if (selection.isCreateValidator()) {
+                // 生成校验注解
+                List<String> validationAnnotations = generateValidationAnnotations(selection, classInfo, field);
+                fieldData.put("validationAnnotations", validationAnnotations);
+            }
+
+            if (selection.isCreateSwagger()) {
+                fieldData.put("swaggerAnnotation", "@ApiModelProperty(value = \"" + field.getComment() + "\")");
+            }
+
+            fields.add(fieldData);
+        }
+        data.put("fields", fields);
+
+        // 关联关系相关
+        if (!"普通".equalsIgnoreCase(selection.getRelationType())) {
+            String joinClass = getJoinClassName(selection);
+            String joinObjectName = getJoinObjectName(selection);
+            String joinFullyQualifiedName = getJoinFullyQualifiedName(selection);
+
+            data.put("joinClass", joinClass);
+            data.put("joinObjectName", joinObjectName);
+            data.put("joinFullyQualifiedName", joinFullyQualifiedName);
+
+            if ("一对多".equalsIgnoreCase(selection.getRelationType())) {
+                data.put("isList", true);
+            } else {
+                data.put("isList", false);
+            }
+        }
+
+        // 添加 isJoinClass 变量
+        data.put("isJoinClass", classInfo.isJoinClass());
+
+        return data;
     }
 
     /**
@@ -559,36 +718,98 @@ public class CodeGenerator {
     }
 
     /**
-     * 构建 SELECT 字段部分
+     * 构建 SELECT 字段部分用于 MyBatis Template
+     *
+     * @param fields     表字段列表
+     * @param tableAlias 表别名
+     * @return 构建后的 SELECT 字段字符串
      */
-    private String buildSelectFields(List<TableField> fields, String tableAlias) {
+    private String buildSelectFieldsForMyBatis(List<TableField> fields, String tableAlias) {
         return fields.stream()
-                .map(field -> String.format("        %s.%s AS %s_%s",
+                .map(field -> String.format("%s.%s AS %s_%s ",
                         tableAlias,
                         field.getColumnName(),
                         tableAlias,
                         field.getColumnName()))
-                .collect(Collectors.joining(",\n"));
+                .collect(Collectors.joining(",\n\t"));
     }
 
     /**
      * 构建 JOIN 子句
+     *
+     * @param selection 用户选择的数据
+     * @param joinAlias 表别名
+     * @return 构建后的 JOIN 子句字符串
      */
     private String buildJoinClause(UserSelection selection, String joinAlias) {
+
         String joinType = "LEFT JOIN"; // 可根据 relationType 选择 JOIN 类型
-        if (selection.getJoinObjectName().equals(joinAlias)) {
-            // 如果表别名和表名一样，就不用指定表别名
-            return String.format("    %s %s ON %s",
+        String joinCondition = selection.getJoinCondition();
+
+        if (selection.getJoinTableAlias() != null && !selection.getJoinTableAlias().isEmpty()
+                && !joinAlias.equals(selection.getJoinTable())) {
+            return String.format("%s %s AS %s \n\tON %s",
                     joinType,
-                    selection.getJoinObjectName(),
-                    selection.getJoinCondition());
-        } else {
-            // 示例：仅支持单一关联关系
-            return String.format("    %s %s AS %s ON %s",
-                    joinType,
-                    selection.getJoinObjectName(),
+                    selection.getJoinTable(),
                     joinAlias,
-                    selection.getJoinCondition());
+                    joinCondition);
+        } else {
+            // 如果没有别名，直接使用表名
+            return String.format("%s %s \n\tON %s",
+                    joinType,
+                    selection.getJoinTable(),
+                    joinCondition);
         }
     }
+
+    /**
+     * 获取连接类的类型名。
+     *
+     * @param selection 用户选择的数据
+     * @return 连接类的类型名
+     */
+    private String getJoinClassName(UserSelection selection) {
+        if (selection.getGeneratedJoinClassInfo() != null) {
+            return selection.getGeneratedJoinClassInfo().getClassName();
+        } else if (selection.getSelectedJoinClassInfo() != null) {
+            return selection.getSelectedJoinClassInfo().getClassName();
+        } else {
+            return "";
+        }
+    }
+
+    /**
+     * 获取连接类的字段名（类型名首字母小写）。
+     *
+     * @param selection 用户选择的数据
+     * @return 连接类的字段名
+     */
+    private String getJoinObjectName(UserSelection selection) {
+        if (selection.getJoinObjectName() != null && !selection.getJoinObjectName().isEmpty()) {
+            return selection.getJoinObjectName();
+        }
+
+        String className = getJoinClassName(selection);
+        if (className.isEmpty()) {
+            return "";
+        }
+        return className.substring(0, 1).toLowerCase() + className.substring(1);
+    }
+
+    /**
+     * 获取连接类的全限定名。
+     *
+     * @param selection 用户选择的数据
+     * @return 连接类的全限定名
+     */
+    private String getJoinFullyQualifiedName(UserSelection selection) {
+        if (selection.getGeneratedJoinClassInfo() != null) {
+            return selection.getGeneratedJoinClassInfo().getPackageName() + "." + selection.getGeneratedJoinClassInfo().getClassName();
+        } else if (selection.getSelectedJoinClassInfo() != null) {
+            return selection.getSelectedJoinClassInfo().getFullyQualifiedName();
+        } else {
+            return "";
+        }
+    }
+
 }

@@ -11,10 +11,16 @@ import java.awt.event.ItemListener;
 
 /**
  * JavaSelectOrCreatePanel 处理用户关于生成类的选择
+ * 包括生成新类、选择现有类以及主对象生成被连接对象选择等选项
+ * 同时支持生成 Swagger 注解、参数校验注解和 Lombok 注解
+ *
+ * @author
  */
 public class JavaSelectOrCreatePanel extends JPanel {
     JLabel resultObject = new JLabel("结果类：");
     JLabel relationType = new JLabel("关联关系：");
+    JLabel joinObjectNameLabel = new JLabel("连接对象字段名：");
+    JTextField joinObjectNameTextField;
     // 选择对象或生成对象单选框
     JCheckBox create = new JCheckBox("生成新类");
     JCheckBox search = new JCheckBox("选择现有");
@@ -24,12 +30,18 @@ public class JavaSelectOrCreatePanel extends JPanel {
     JCheckBox createLombok = new JCheckBox("生成Lombok注解");
     private SearchableComboBox relationTypeComboBox;
     // 添加 ItemListener 来确保每次只有一个复选框被选中
+    //选择主对象类设置面板
     private ClassSearchPanel mainClassSearchPanel;
+    //选择连接对象类面板
     private ClassSearchPanel joinClassSearchPanel;
+    // 如果封装结果对象不是嵌套，选择对象类面板
     private ClassSearchPanel classSearchPanel;
 
+    //生成主对象类设置面板
     private CreateClassPanel mainCreateClassPanel;
+    // 生成连接对象类设置面板
     private CreateClassPanel joinCreateClassPanel;
+    // 如果生成封装结果对象不是嵌套，生成对象类设置面板
     private CreateClassPanel createClassPanel;
 
     private JPanel kuozhan;
@@ -39,18 +51,8 @@ public class JavaSelectOrCreatePanel extends JPanel {
 
     private String previousRelationTypeSelection = "";
 
-    // 2:选择对象、1：生成对象、3：生成对象+选择对象
+    // 1：生成对象、2:选择对象、3：生成对象+选择对象
     private int selectedIndex = 0;
-
-    // 新增的 UI 组件
-    private JTextField rootObjectNameField; // 根对象名输入框
-    private JTextField joinObjectNameField; // 链接对象名输入框
-    private JTextField filePathField;       // 文件保存路径输入框
-    private JCheckBox saveJavaToFileCheckBox; // 是否保存 Java 文件复选框
-
-    private JLabel rootObjectNameLabel = new JLabel("根对象名:");
-    private JLabel joinObjectNameLabel = new JLabel("链接对象名:");
-    private JLabel filePathLabel = new JLabel("文件保存路径:");
 
     public JavaSelectOrCreatePanel(Project project, String title) {
         this.project = project;
@@ -81,6 +83,8 @@ public class JavaSelectOrCreatePanel extends JPanel {
         JPanel relationTypePanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
         relationTypePanel.add(relationType);
         relationTypePanel.add(relationTypeComboBox);
+        relationTypePanel.add(joinObjectNameLabel);
+        relationTypePanel.add(joinObjectNameTextField);
         add(relationTypePanel);
 
         // 创建面板
@@ -121,30 +125,8 @@ public class JavaSelectOrCreatePanel extends JPanel {
         kuozhan.setVisible(false);
         add(kuozhan);
 
-        // 新增的对象名和文件路径输入面板
-        addObjectNameAndFilePathPanels();
     }
 
-    private void addObjectNameAndFilePathPanels() {
-        // 根对象名和链接对象名面板
-        JPanel objectNamesPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        objectNamesPanel.add(rootObjectNameLabel);
-        rootObjectNameField = new JTextField(15);
-        objectNamesPanel.add(rootObjectNameField);
-        objectNamesPanel.add(joinObjectNameLabel);
-        joinObjectNameField = new JTextField(15);
-        objectNamesPanel.add(joinObjectNameField);
-        add(objectNamesPanel);
-
-        // 文件保存路径和保存选项面板
-        JPanel filePathPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        filePathPanel.add(filePathLabel);
-        filePathField = new JTextField(30);
-        filePathPanel.add(filePathField);
-        saveJavaToFileCheckBox = new JCheckBox("自动保存 Java 文件");
-        filePathPanel.add(saveJavaToFileCheckBox);
-        add(filePathPanel);
-    }
 
     private void init() {
         // 关联关系
@@ -164,6 +146,10 @@ public class JavaSelectOrCreatePanel extends JPanel {
         mainClassSearchPanel.setVisible(false);
         joinClassSearchPanel.setVisible(false);
         createClassPanel.setVisible(false);
+
+        joinObjectNameTextField = new JTextField(20);
+        joinObjectNameTextField.setVisible(false);
+        joinObjectNameLabel.setVisible(false);
     }
 
     private void listener() {
@@ -253,6 +239,8 @@ public class JavaSelectOrCreatePanel extends JPanel {
                     mainClassSearchPanel.setVisible(false);
                     joinClassSearchPanel.setVisible(false);
                     createClassPanel.setVisible(true);
+                    joinObjectNameLabel.setVisible(false);
+                    joinObjectNameTextField.setVisible(false);
                 } else {
                     mainCreateClassPanel.setVisible(true);
                     joinCreateClassPanel.setVisible(true);
@@ -260,6 +248,9 @@ public class JavaSelectOrCreatePanel extends JPanel {
                     mainClassSearchPanel.setVisible(false);
                     joinClassSearchPanel.setVisible(false);
                     createClassPanel.setVisible(false);
+
+                    joinObjectNameLabel.setVisible(true);
+                    joinObjectNameTextField.setVisible(true);
                 }
                 break;
             // search
@@ -271,6 +262,9 @@ public class JavaSelectOrCreatePanel extends JPanel {
                     mainClassSearchPanel.setVisible(false);
                     joinClassSearchPanel.setVisible(false);
                     createClassPanel.setVisible(false);
+
+                    joinObjectNameLabel.setVisible(false);
+                    joinObjectNameTextField.setVisible(false);
                 } else {
                     mainCreateClassPanel.setVisible(false);
                     joinCreateClassPanel.setVisible(false);
@@ -278,12 +272,18 @@ public class JavaSelectOrCreatePanel extends JPanel {
                     mainClassSearchPanel.setVisible(true);
                     joinClassSearchPanel.setVisible(true);
                     createClassPanel.setVisible(false);
+
+                    joinObjectNameLabel.setVisible(true);
+                    joinObjectNameTextField.setVisible(true);
                 }
                 break;
             // createMainSearchJoin
             case 3:
                 // 对于 case 3，根据 relationType 可能需要更多逻辑
                 // 目前不需要特殊处理
+
+                joinObjectNameLabel.setVisible(true);
+                joinObjectNameTextField.setVisible(true);
                 break;
             default:
                 break;
@@ -292,6 +292,19 @@ public class JavaSelectOrCreatePanel extends JPanel {
 
     /**
      * 获取当前用户选择的生成类型
+     * 返回是'生成新类'还是'选择类'还是'主对象生成，被连接对象选择' 标识
+     * 用于后续的生成代码逻辑
+     * 1：生成对象、2:选择对象、3：生成对象+选择对象
+     * 1.生成对象时:
+     * 如果是'普通'则根据 createClassPanel获取信息生成
+     * 如果是'一对一'，'一对多' 根据 mainCreateClassPanel , joinCreateClassPanel获取信息生成
+     * 2.选择对象时:
+     * 如果是'普通'则根据 classSearchPanel获取信息处理
+     * 如果是'一对一'，'一对多' 根据 mainClassSearchPanel , joinClassSearchPanel获取信息处理
+     * 3.生成对象+选择对象时:
+     * 根据 mainCreateClassPanel , joinClassSearchPanel获取信息处理
+     *
+     * @return UserSelection.GenerationType 枚举类型
      */
     public UserSelection.GenerationType getGenerationType() {
         if (create.isSelected()) {
@@ -306,38 +319,108 @@ public class JavaSelectOrCreatePanel extends JPanel {
     }
 
     /**
-     * 获取根对象名
-     */
-    public String getRootObjectName() {
-        return rootObjectNameField.getText().trim();
-    }
-
-    /**
-     * 获取链接对象名
-     */
-    public String getJoinObjectName() {
-        return joinObjectNameField.getText().trim();
-    }
-
-    /**
-     * 获取文件保存路径
-     */
-    public String getFilePath() {
-        return filePathField.getText().trim();
-    }
-
-    /**
-     * 获取是否保存 Java 文件
-     */
-    public boolean getSaveJavaToFile() {
-        return saveJavaToFileCheckBox.isSelected();
-    }
-
-    /**
      * 获取关联关系类型
+     *
+     * @return String 关联关系类型
      */
     public String getRelationType() {
         return previousRelationTypeSelection;
+    }
+
+    /**
+     * 获取生成主对象信息
+     *
+     * @return GeneratedClassInfo 生成主对象类的信息
+     */
+    public GeneratedClassInfo getGeneratedMainClassInfo() {
+        if (mainCreateClassPanel.isVisible()) {
+            return new GeneratedClassInfo(
+                    mainCreateClassPanel.getPackageName(),
+                    mainCreateClassPanel.getClassName(),
+                    mainCreateClassPanel.getSavePath(),
+                    false
+            );
+        }
+        return null;
+    }
+
+    /**
+     * 获取选择主对象信息
+     *
+     * @return SelectedClassInfo 选择主对象类的信息
+     */
+    public SelectedClassInfo getSelectedMainClassInfo() {
+        if (mainClassSearchPanel.isVisible()) {
+            return new SelectedClassInfo(
+                    mainClassSearchPanel.getSelectedClassName(),
+                    mainClassSearchPanel.getSelectedFullyQualifiedName()
+            );
+        }
+        return null;
+    }
+
+    /**
+     * 获取生成链接对象信息
+     *
+     * @return GeneratedClassInfo 生成链接对象类的信息
+     */
+    public GeneratedClassInfo getGeneratedJoinClassInfo() {
+        if (joinCreateClassPanel.isVisible()) {
+            return new GeneratedClassInfo(
+                    joinCreateClassPanel.getPackageName(),
+                    joinCreateClassPanel.getClassName(),
+                    joinCreateClassPanel.getSavePath(),
+                    true
+            );
+        }
+        return null;
+    }
+
+    /**
+     * 获取选择链接对象信息
+     *
+     * @return SelectedClassInfo 选择链接对象类的信息
+     */
+    public SelectedClassInfo getSelectedJoinClassInfo() {
+        if (joinClassSearchPanel.isVisible()) {
+            return new SelectedClassInfo(
+                    joinClassSearchPanel.getSelectedClassName(),
+                    joinClassSearchPanel.getSelectedFullyQualifiedName()
+            );
+        }
+        return null;
+    }
+
+    /**
+     * 获取生成对象信息
+     *
+     * @return GeneratedClassInfo 生成对象类的信息
+     */
+    public GeneratedClassInfo getGeneratedClassInfo() {
+        if (createClassPanel.isVisible()) {
+            return new GeneratedClassInfo(
+                    createClassPanel.getPackageName(),
+                    createClassPanel.getClassName(),
+                    createClassPanel.getSavePath(),
+                    false
+            );
+        }
+        return null;
+    }
+
+    /**
+     * 获取选择对象信息
+     *
+     * @return SelectedClassInfo 选择对象类的信息
+     */
+    public SelectedClassInfo getSelectedClassInfo() {
+        if (classSearchPanel.isVisible()) {
+            return new SelectedClassInfo(
+                    classSearchPanel.getSelectedClassName(),
+                    classSearchPanel.getSelectedFullyQualifiedName()
+            );
+        }
+        return null;
     }
 
     // 新增的 Getter 方法
@@ -352,4 +435,78 @@ public class JavaSelectOrCreatePanel extends JPanel {
     public boolean isCreateLombok() {
         return createLombok.isSelected();
     }
+
+    public String getJoinObjectName() {
+        return joinObjectNameTextField.getText();
+    }
+
+    public static class SelectedClassInfo {
+        private String className;
+        private String fullyQualifiedName;
+
+        public SelectedClassInfo(String className, String fullyQualifiedName) {
+            this.className = className;
+            this.fullyQualifiedName = fullyQualifiedName;
+        }
+
+        public String getClassName() {
+            return className;
+        }
+
+        public String getFullyQualifiedName() {
+            return fullyQualifiedName;
+        }
+    }
+
+    /**
+     * 生成的类信息
+     */
+    public class GeneratedClassInfo {
+        private String packageName;
+        private String className;
+        private String savePath;
+        private boolean isJoinClass; // 是否为连接类
+
+        public GeneratedClassInfo(String packageName, String className, String savePath, boolean isJoinClass) {
+            this.packageName = packageName;
+            this.className = className;
+            this.savePath = savePath;
+            this.isJoinClass = isJoinClass;
+        }
+
+        // Getters and Setters
+
+        public String getPackageName() {
+            return packageName;
+        }
+
+        public void setPackageName(String packageName) {
+            this.packageName = packageName;
+        }
+
+        public String getClassName() {
+            return className;
+        }
+
+        public void setClassName(String className) {
+            this.className = className;
+        }
+
+        public String getSavePath() {
+            return savePath;
+        }
+
+        public void setSavePath(String savePath) {
+            this.savePath = savePath;
+        }
+
+        public boolean isJoinClass() {
+            return isJoinClass;
+        }
+
+        public void setJoinClass(boolean joinClass) {
+            isJoinClass = joinClass;
+        }
+    }
+
 }

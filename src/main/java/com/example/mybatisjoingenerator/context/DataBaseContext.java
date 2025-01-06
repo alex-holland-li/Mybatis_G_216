@@ -7,9 +7,12 @@ import com.intellij.util.containers.JBIterable;
 
 import java.util.*;
 
+/**
+ * @author 李运
+ */
 public class DataBaseContext {
-    // 数据库信息存储对象 Map<数据库名， Map<Schema名，Map<表名，Map<字段名，字段类型>>>>
-    public static final Map<String, Map<String, Map<String, Map<String, String>>>> DATABASE_MAP = new HashMap<>();
+    // 数据库信息存储对象 Map<数据库名， Map<Schema名，Map<表名，Map<字段名，字段DasColumn>>>>
+    public static final Map<String, Map<String, Map<String, Map<String, DasColumn>>>> DATABASE_MAP = new HashMap<>();
 
     /**
      * 添加数据库信息到上下文。
@@ -18,7 +21,7 @@ public class DataBaseContext {
      * @param schemaName   模式名
      * @param tableInfo    表信息
      */
-    public static void addDatabaseInfo(String databaseName, String schemaName, Map<String, Map<String, String>> tableInfo) {
+    public static void addDatabaseInfo(String databaseName, String schemaName, Map<String, Map<String, DasColumn>> tableInfo) {
         DATABASE_MAP
                 .computeIfAbsent(databaseName, k -> new HashMap<>())
                 .put(schemaName, tableInfo);
@@ -36,7 +39,7 @@ public class DataBaseContext {
 
             // 获取该数据源的所有 schemas
             JBIterable<? extends DasNamespace> schemas = DasUtil.getSchemas(dataSource);
-            Map<String, Map<String, Map<String, String>>> databaseInfo = new HashMap<>();
+            Map<String, Map<String, Map<String, DasColumn>>> databaseInfo = new HashMap<>();
             // 遍历每个 schema
             for (DasNamespace schema : schemas) {
                 String schemaName = schema.getName();
@@ -54,27 +57,23 @@ public class DataBaseContext {
      * @param dasNamespace 命名空间
      * @return 表信息映射
      */
-    private static Map<String, Map<String, String>> getTableInfo(DasNamespace dasNamespace) {
-        Map<String, Map<String, String>> tableInfo = new HashMap<>();
+    private static Map<String, Map<String, DasColumn>> getTableInfo(DasNamespace dasNamespace) {
+        Map<String, Map<String, DasColumn>> tableInfo = new HashMap<>();
         // 获取该命名空间下的所有子对象，过滤出表对象
         JBIterable<? extends DasObject> children = dasNamespace.getDasChildren(ObjectKind.TABLE);
 
         // 遍历所有子对象，检查它们是否是表类型
         for (DasObject child : children) {
-            if (child instanceof DasTable) {
-                DasTable table = (DasTable) child;
+            if (child instanceof DasTable table) {
                 String tableName = table.getName();
                 // 获取表的注释（如果有）
                 String comment = table.getComment();
-                System.out.println("Table: " + tableName + " - Comment: " + comment);
-
-                Map<String, String> columnsInfo = new HashMap<>();
+                Map<String, DasColumn> columnsInfo = new HashMap<>();
                 // 获取表中的列
                 JBIterable<? extends DasObject> columns = table.getDasChildren(ObjectKind.COLUMN);
                 for (DasObject column : columns) {
                     if (column instanceof DasColumn dasColumn) {
-                        System.out.println("  Column: " + dasColumn.getName());
-                        columnsInfo.put(column.getName(), dasColumn.getDataType().typeName);
+                        columnsInfo.put(column.getName(), dasColumn);
                     }
                 }
                 tableInfo.put(child.getName(), columnsInfo);
@@ -114,7 +113,7 @@ public class DataBaseContext {
      */
     public static Set<String> getAllTableNames(String databaseName, String schemaName) {
         if (DATABASE_MAP.containsKey(databaseName)) {
-            Map<String, Map<String, Map<String, String>>> schemas = DATABASE_MAP.get(databaseName);
+            Map<String, Map<String, Map<String, DasColumn>>> schemas = DATABASE_MAP.get(databaseName);
             if (schemas.containsKey(schemaName)) {
                 return schemas.get(schemaName).keySet();
             }
@@ -129,8 +128,8 @@ public class DataBaseContext {
      */
     public static Set<String> getAllTableNames() {
         Set<String> tableNames = new HashSet<>();
-        for (Map<String, Map<String, Map<String, String>>> schemas : DATABASE_MAP.values()) {
-            for (Map<String, Map<String, String>> tables : schemas.values()) {
+        for (Map<String, Map<String, Map<String, DasColumn>>> schemas : DATABASE_MAP.values()) {
+            for (Map<String, Map<String, DasColumn>> tables : schemas.values()) {
                 tableNames.addAll(tables.keySet());
             }
         }
@@ -145,11 +144,11 @@ public class DataBaseContext {
      * @param tableName    表名
      * @return 字段信息映射，如果不存在则返回null
      */
-    public static Map<String, String> getTableColumns(String databaseName, String schemaName, String tableName) {
+    public static Map<String, DasColumn> getTableColumns(String databaseName, String schemaName, String tableName) {
         if (DATABASE_MAP.containsKey(databaseName)) {
-            Map<String, Map<String, Map<String, String>>> schemas = DATABASE_MAP.get(databaseName);
+            Map<String, Map<String, Map<String, DasColumn>>> schemas = DATABASE_MAP.get(databaseName);
             if (schemas.containsKey(schemaName)) {
-                Map<String, Map<String, String>> tables = schemas.get(schemaName);
+                Map<String, Map<String, DasColumn>> tables = schemas.get(schemaName);
                 return tables.get(tableName);
             }
         }
@@ -157,6 +156,10 @@ public class DataBaseContext {
     }
 
     public static String getColumnType(String previousDatabaseSelection, String previousSchemaSelection, String previousMainTableSelection, String selectedField) {
+        return DATABASE_MAP.get(previousDatabaseSelection).get(previousSchemaSelection).get(previousMainTableSelection).get(selectedField).getDataType().typeName;
+    }
+
+    public static DasColumn getColumn(String previousDatabaseSelection, String previousSchemaSelection, String previousMainTableSelection, String selectedField) {
         return DATABASE_MAP.get(previousDatabaseSelection).get(previousSchemaSelection).get(previousMainTableSelection).get(selectedField);
     }
 }

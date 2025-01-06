@@ -14,7 +14,9 @@ public class CodeDisplayFrame extends JFrame {
     private CodePanel sqlPanel;
     private CodePanel resultMapPanel;
     private CodePanel mapperInterfacePanel;
-    private CodePanel javaClassesPanel;
+    private CodePanel mainJavaClassesPanel;
+
+    private CodePanel joinJavaClassesPanel;
 
     /**
      * 构造函数
@@ -24,41 +26,42 @@ public class CodeDisplayFrame extends JFrame {
      * @param mapperCode      Mapper 接口代码
      * @param javaClassesCode Java 对象源码
      */
-    public CodeDisplayFrame(String sqlCode, String resultMapCode, String mapperCode, String javaClassesCode) {
+    public CodeDisplayFrame(String sqlCode, String resultMapCode, String mapperCode, String javaClassesCode, String joinJavaClassesCode) {
         setTitle("生成的代码");
         setSize(900, 800);
         setLocationRelativeTo(null); // 居中显示
         setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE); // 关闭窗口时仅销毁当前窗口
 
-        initializeComponents(sqlCode, resultMapCode, mapperCode, javaClassesCode);
+        initializeComponents(sqlCode, resultMapCode, mapperCode, javaClassesCode, joinJavaClassesCode);
         layoutComponents();
     }
 
     /**
      * 初始化组件
      *
-     * @param sqlCode         MyBatis XML 查询动态 SQL
-     * @param resultMapCode   MyBatis XML resultMap
-     * @param mapperCode      Mapper 接口代码
-     * @param javaClassesCode Java 对象源码
+     * @param sqlCode       MyBatis XML 查询动态 SQL
+     * @param resultMapCode MyBatis XML resultMap
+     * @param mapperCode    Mapper 接口代码
      */
-    private void initializeComponents(String sqlCode, String resultMapCode, String mapperCode, String javaClassesCode) {
+    private void initializeComponents(String sqlCode, String resultMapCode, String mapperCode, String mainJavaClassesCode, String joinJavaClassesCode) {
         sqlPanel = new CodePanel("=== MyBatis XML 查询动态 SQL ===", sqlCode);
         resultMapPanel = new CodePanel("=== MyBatis XML resultMap ===", resultMapCode);
         mapperInterfacePanel = new CodePanel("=== Mapper 接口 ===", mapperCode);
-        javaClassesPanel = new CodePanel("=== Java 对象源码 ===", javaClassesCode);
+        mainJavaClassesPanel = new CodePanel("=== Java 对象源码 ===", mainJavaClassesCode);
+        joinJavaClassesPanel = new CodePanel("=== Java 对象源码 ===", joinJavaClassesCode);
     }
 
     /**
      * 布局组件
      */
     private void layoutComponents() {
-        setLayout(new GridLayout(4, 1, 10, 10)); // 四行一列，间距为10
+        setLayout(new GridLayout(5, 1, 10, 10)); // 四行一列，间距为10
 
         add(sqlPanel);
         add(resultMapPanel);
         add(mapperInterfacePanel);
-        add(javaClassesPanel);
+        add(mainJavaClassesPanel);
+        add(joinJavaClassesPanel);
     }
 
     /**

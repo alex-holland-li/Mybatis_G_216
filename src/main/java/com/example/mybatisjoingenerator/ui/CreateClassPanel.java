@@ -1,6 +1,5 @@
 package com.example.mybatisjoingenerator.ui;
 
-import com.example.mybatisjoingenerator.models.ResultJavaInfo;
 import com.intellij.openapi.project.Project;
 import com.intellij.ui.JBColor;
 import com.intellij.util.ui.JBUI;
@@ -40,12 +39,10 @@ public class CreateClassPanel extends JPanel {
     //路径选择
     private JFileChooser packagePathChooser;
     private JTextField savePath;
-    private ResultJavaInfo panelData;
 
     public CreateClassPanel(Project project, String title) {
         this.project = project;
         this.title = title;
-        this.panelData = new ResultJavaInfo();
         init();
         buildUi();
         listener();
@@ -64,7 +61,6 @@ public class CreateClassPanel extends JPanel {
                 savePath.setText(Paths.get(selectedFolder.getAbsolutePath()).toString());
                 //根据选择的路径计算包名
                 packageName.setText(calculatePathDiff(rootPath, Paths.get(savePath.getText())));
-                updatePanelData();
             }
         });
 
@@ -95,7 +91,6 @@ public class CreateClassPanel extends JPanel {
                 } else {
                     packageName.setForeground(JBColor.RED);  // 不合法时设为红色
                 }
-                updatePanelData();
             }
 
             // 使用正则表达式验证包名
@@ -174,32 +169,20 @@ public class CreateClassPanel extends JPanel {
         rootPath = basePath.resolve(path);
         packagePathChooser.setCurrentDirectory(rootPath.toFile());
 
-        // 初始化 PanelData
-        className.getDocument().addDocumentListener(new DocumentListener() {
-            @Override
-            public void insertUpdate(DocumentEvent e) {
-                updatePanelData();
-            }
-
-            @Override
-            public void removeUpdate(DocumentEvent e) {
-                updatePanelData();
-            }
-
-            @Override
-            public void changedUpdate(DocumentEvent e) {
-                updatePanelData();
-            }
-        });
     }
 
-    private void updatePanelData() {
-        panelData.setClassName(className.getText().trim());
-        panelData.setPackageName(packageName.getText().trim());
-        panelData.setSavePath(savePath.getText().trim());
+
+    public String getClassName() {
+        return className.getText().trim();
     }
 
-    public ResultJavaInfo getPanelData() {
-        return panelData;
+    public String getPackageName() {
+        return packageName.getText().trim();
     }
+
+    public String getSavePath() {
+        return savePath.getText().trim();
+    }
+
+
 }
