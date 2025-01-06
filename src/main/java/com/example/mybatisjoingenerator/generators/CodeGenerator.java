@@ -8,6 +8,7 @@ import com.example.mybatisjoingenerator.ui.JavaSelectOrCreatePanel.GeneratedClas
 import com.example.mybatisjoingenerator.ui.JavaSelectOrCreatePanel.SelectedClassInfo;
 import com.intellij.database.model.DasColumn;
 import com.intellij.database.model.DataType;
+import com.intellij.ide.util.PropertiesComponent;
 import freemarker.template.Configuration;
 import freemarker.template.Template;
 import freemarker.template.TemplateException;
@@ -137,11 +138,17 @@ public class CodeGenerator {
      */
     private String generateJavaClass(GeneratedClassInfo classInfo, UserSelection selection) {
         try {
+            PropertiesComponent properties = PropertiesComponent.getInstance();
+            String userName = properties.getValue("user.name");
+            if (userName == null || userName.isEmpty()) {
+                userName = System.getProperty("user.name");
+            }
             // 加载模板
             Template template = cfg.getTemplate("EntityTemplate.ftl");
 
             // 准备数据模型
             Map<String, Object> templateData = prepareTemplateData(selection, classInfo);
+            templateData.put("author", userName);
 
             // 生成代码
             StringWriter out = new StringWriter();
@@ -178,7 +185,7 @@ public class CodeGenerator {
 
             // 构建 SELECT 字段部分
             String selectFields = buildSelectFieldsForMyBatis(selection.getSelectedMainFields(), selection.getMainTableAlias());
-            selectFields += ",\n\t" + buildSelectFieldsForMyBatis(selection.getSelectedJoinFields(), selection.getJoinTableAlias());
+            selectFields += ", \n" + buildSelectFieldsForMyBatis(selection.getSelectedJoinFields(), selection.getJoinTableAlias());
             selectData.put("selectFields", selectFields);
 
             selectData.put("from", createFromClause(selection));
@@ -731,7 +738,7 @@ public class CodeGenerator {
                         field.getColumnName(),
                         tableAlias,
                         field.getColumnName()))
-                .collect(Collectors.joining(",\n\t"));
+                .collect(Collectors.joining(", \n"));
     }
 
     /**
@@ -748,14 +755,14 @@ public class CodeGenerator {
 
         if (selection.getJoinTableAlias() != null && !selection.getJoinTableAlias().isEmpty()
                 && !joinAlias.equals(selection.getJoinTable())) {
-            return String.format("%s %s AS %s \n\tON %s",
+            return String.format("%s %s AS %s \nON %s",
                     joinType,
                     selection.getJoinTable(),
                     joinAlias,
                     joinCondition);
         } else {
             // 如果没有别名，直接使用表名
-            return String.format("%s %s \n\tON %s",
+            return String.format("%s %s \nON %s",
                     joinType,
                     selection.getJoinTable(),
                     joinCondition);

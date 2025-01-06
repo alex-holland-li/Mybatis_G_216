@@ -19,13 +19,12 @@ import java.util.List;
 </#if>
 
 /**
-*
-* @author liyun
-*/
+ * @author ${author}
+ */
 
 <#-- 类注解 -->
 <#if createSwagger>
-@ApiModel(description = "${className}对象")
+@ApiModel(description = "${className}")
 </#if>
 <#if createLombok>
 @Data
