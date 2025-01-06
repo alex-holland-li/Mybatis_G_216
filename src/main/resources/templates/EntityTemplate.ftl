@@ -11,7 +11,6 @@ package ${packageName};
 <#if createLombok>
     import lombok.Data;
 </#if>
-
 <#if (!isJoinClass!false) && relationType != "普通">
     import ${joinFullyQualifiedName};
     <#if isList?? && isList>

@@ -3,6 +3,6 @@
     ${selectFields}
     FROM ${from}
     <#if joinClause?trim != "">
-        ${joinClause}
+    ${joinClause}
     </#if>
 </select>
