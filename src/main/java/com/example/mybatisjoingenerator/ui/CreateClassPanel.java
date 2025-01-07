@@ -1,8 +1,10 @@
 package com.example.mybatisjoingenerator.ui;
 
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.ui.Messages;
 import com.intellij.ui.JBColor;
 import com.intellij.util.ui.JBUI;
+import org.apache.commons.lang3.StringUtils;
 
 import javax.swing.*;
 import javax.swing.event.DocumentEvent;
@@ -10,10 +12,12 @@ import javax.swing.event.DocumentListener;
 //import java.awt.*;
 import java.awt.*;
 import java.io.File;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 
 /**
@@ -42,10 +46,10 @@ public class CreateClassPanel extends JPanel {
     private JFileChooser packagePathChooser;
     private JTextField savePath;
     private String rootPathString = "";
+    private boolean packageNameIsUpdate = true;
+    private boolean savePathIsUpdate = true;
 
-    private String packagePathString = "";
-
-    private String savePathString = "";
+    //private Boolean userUpdate
 
     public CreateClassPanel(Project project, String title) {
         this.project = project;
@@ -134,7 +138,23 @@ public class CreateClassPanel extends JPanel {
             if (returnValue == JFileChooser.APPROVE_OPTION) {
                 // 获取选择的路径
                 File selectedFolder = packagePathChooser.getSelectedFile();
-                checkSavePath(Paths.get(selectedFolder.getAbsolutePath()));
+                Path path = Paths.get(selectedFolder.getAbsolutePath());
+                Map<String, String> stringMap = calculatePathDiff(path);
+
+                if (stringMap.get("rootPathString") == null) {
+                    Messages.showWarningDialog("请选择java源码目录", "警告");
+                } else {
+
+                    String savePathString = stringMap.get("savePathString");
+                    String packagePathString = stringMap.get("packagePathString");
+                    packageNameIsUpdate = false;
+                    savePathIsUpdate = false;
+                    rootPathString = stringMap.get("rootPathString");
+                    savePath.setText(savePathString);
+                    packageName.setText(packagePathString);
+                    packageNameIsUpdate = true;
+                    savePathIsUpdate = true;
+                }
             }
         });
 
@@ -157,17 +177,19 @@ public class CreateClassPanel extends JPanel {
 
             // 通用处理方法
             private void handleTextUpdate() {
+
                 String input = packageName.getText().trim();
-                if (isValidPackageName(input)) {
+                if (input.isEmpty() || isValidPackageName(input)) {
                     packageName.setForeground(JBColor.BLACK);  // 合法时设为黑色
-                    if (!input.equals(packagePathString)) {
-                        //根据包名+rootPathString构建新的保存路径
-                        Path path = createPath(rootPathString, input);
-                        checkSavePath(path);
+                    if (packageNameIsUpdate) {
+                        savePathIsUpdate = false;
+                        savePath.setText(createPath(rootPathString, input).toString());
+                        savePathIsUpdate = true;
                     }
                 } else {
                     packageName.setForeground(JBColor.RED);  // 不合法时设为红色
                 }
+
             }
 
             // 使用正则表达式验证包名
@@ -199,10 +221,20 @@ public class CreateClassPanel extends JPanel {
 
             private void handleTextUpdate() {
                 String input = savePath.getText().trim();
+
                 if (isValidDirectoryPathFormat(input)) {
-                    savePath.setForeground(JBColor.BLACK);  // 合法时设为黑色
-                    if (!savePathString.equals(input)) {
-                        checkSavePath(Paths.get(input));
+                    Path path = Paths.get(input);
+                    Map<String, String> stringMap = calculatePathDiff(path);
+                    if (stringMap.get("rootPathString") != null) {
+                        savePath.setForeground(JBColor.BLACK);
+                        if (savePathIsUpdate) {
+                            packageNameIsUpdate = false;
+                            rootPathString = stringMap.get("rootPathString");
+                            packageName.setText(stringMap.get("packagePathString"));
+                            packageNameIsUpdate = true;
+                        }
+                    } else {
+                        savePath.setForeground(JBColor.RED);  // 不合法时
                     }
                 } else {
                     savePath.setForeground(JBColor.RED);  // 不合法时设为红色
@@ -224,6 +256,8 @@ public class CreateClassPanel extends JPanel {
         if (path == null) {
             return objectObjectHashMap;
         }
+
+        objectObjectHashMap.put("savePathString", path.toString());
 
         // 将路径元素存储到列表中
         List<String> pathElements = new ArrayList<>();
@@ -249,8 +283,6 @@ public class CreateClassPanel extends JPanel {
 
         if (lastIndex == -1) {
             // 未找到 "src/main/java"，返回原路径和空包路径
-            objectObjectHashMap.put("rootPathString", path.toString());
-            objectObjectHashMap.put("packagePath", "");
             return objectObjectHashMap;
         }
 
@@ -266,7 +298,7 @@ public class CreateClassPanel extends JPanel {
         if (subPathElements.isEmpty()) {
             // "src/main/java" 后没有子路径
             objectObjectHashMap.put("rootPathString", path.toString());
-            objectObjectHashMap.put("packagePath", "");
+            objectObjectHashMap.put("packagePathString", "");
             return objectObjectHashMap;
         }
 
@@ -274,7 +306,7 @@ public class CreateClassPanel extends JPanel {
         String packagePath = String.join(".", subPathElements);
 
         objectObjectHashMap.put("rootPathString", prePath.toString());
-        objectObjectHashMap.put("packagePath", packagePath);
+        objectObjectHashMap.put("packagePathString", packagePath);
         return objectObjectHashMap;
     }
 
@@ -300,125 +332,30 @@ public class CreateClassPanel extends JPanel {
         return Paths.get(rootPathStr, packageParts);
     }
 
-    /**
-     * 解析保存path
-     *
-     * @param path
-     */
-    private void checkSavePath(Path path) {
-        String savePathString0 = path.toString();
+    // 正则表达式模式匹配Windows路径
+    private static final Pattern WINDOWS_PATH_PATTERN = Pattern.compile("^[A-Za-z]:\\\\((?:[^\\\\/:*?\"<>|]+\\\\)*[^\\\\/:*?\"<>|]*)?$");
 
-        Map<String, String> stringMap = calculatePathDiff(path);
-        String rootPathString0 = stringMap.get("rootPathString");
-        String packagePathString0 = stringMap.get("packagePath");
-
-        if (!rootPathString.equals(rootPathString0)) {
-            rootPathString = rootPathString0 == null ? "" : rootPathString0;
-        }
-
-        if (!savePathString.equals(savePathString0)) {
-            savePathString = savePathString0;
-            savePath.setText(savePathString0);
-        }
-
-        if (!packagePathString.equals(packagePathString0)) {
-            packagePathString = packagePathString0 == null ? "" : packagePathString0;
-            packageName.setText(packagePathString);
-        }
-
-    }
+    // 正则表达式模式匹配Unix/Linux/Mac路径
+    private static final Pattern UNIX_PATH_PATTERN = Pattern.compile("^/(?:[^/]+/)*$");
 
     /**
-     * 检查给定的字符串是否是一个格式上有效的文件夹路径。
+     * 检查给定的字符串是否是一个格式上有效的文件夹绝对路径。
      * 考虑不同操作系统的路径分隔符和字符限制。
      *
      * @param inputPath 要验证的路径字符串
      * @return 如果格式有效则返回 true，否则返回 false
      */
     public static boolean isValidDirectoryPathFormat(String inputPath) {
-        if (inputPath == null || inputPath.trim().isEmpty()) {
+        if (inputPath == null || inputPath.isEmpty()) {
             return false;
         }
 
-        String os = System.getProperty("os.name").toLowerCase();
-        boolean isWindows = os.contains("win");
+        // 判断操作系统类型
+        boolean isWindows = System.getProperty("os.name").toLowerCase().contains("win");
+        Pattern pattern = isWindows ? WINDOWS_PATH_PATTERN : UNIX_PATH_PATTERN;
 
-        if (isWindows) {
-            return isValidWindowsPath(inputPath);
-        } else {
-            return isValidUnixPath(inputPath);
-        }
-    }
-
-    /**
-     * 验证 Windows 系统的路径格式。
-     *
-     * @param path 要验证的路径字符串
-     * @return 如果格式有效则返回 true，否则返回 false
-     */
-    private static boolean isValidWindowsPath(String path) {
-        // 无效字符
-        String invalidChars = "<>:\"/\\|?*";
-        for (char ch : invalidChars.toCharArray()) {
-            if (path.indexOf(ch) >= 0) {
-                System.err.println("路径中包含非法字符: " + ch);
-                return false;
-            }
-        }
-
-        // 检查保留名称
-        String[] reservedNames = {
-                "CON", "PRN", "AUX", "NUL",
-                "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
-                "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"
-        };
-        String upperPath = path.toUpperCase();
-        for (String reserved : reservedNames) {
-            if (upperPath.matches("(?i).*\\b" + reserved + "\\b.*")) {
-                System.err.println("路径包含保留名称: " + reserved);
-                return false;
-            }
-        }
-
-        // 路径不能以空格或句点结尾
-        if (path.endsWith(" ") || path.endsWith(".")) {
-            System.err.println("路径不能以空格或句点结尾");
-            return false;
-        }
-
-        // 可选：检查路径长度
-        // Windows 的传统路径长度限制为 260 个字符
-        if (path.length() > 260) {
-            System.err.println("路径长度超过 260 个字符限制");
-            return false;
-        }
-
-        return true;
-    }
-
-    /**
-     * 验证 Unix/Linux/macOS 系统的路径格式。
-     *
-     * @param path 要验证的路径字符串
-     * @return 如果格式有效则返回 true，否则返回 false
-     */
-    private static boolean isValidUnixPath(String path) {
-        // 在 Unix 系统中，路径不能包含 NULL 字符
-        if (path.contains("\0")) {
-            System.err.println("路径中包含非法字符: NULL");
-            return false;
-        }
-
-        // 路径分隔符是 '/', 不需要进一步检查
-
-        // 可选：检查路径长度
-        // 典型的文件系统对路径长度有较高限制（如 4096 个字符）
-        if (path.length() > 4096) {
-            System.err.println("路径长度超过 4096 个字符限制");
-            return false;
-        }
-
-        return true;
+        // 匹配路径格式
+        return pattern.matcher(inputPath).matches();
     }
 
     public String getClassName() {
